@@ -2,8 +2,9 @@ library(dplyr)
 library(ggplot2)
 library(readr)
 library(tidyverse)
-library(scales)
+library(plotly)
 
+graphics.off()
 # STEP 5 - Filter the dataset to 1967, year with highest correlation coefficient
 rm(list=ls())
 setwd("~/dev/training-requirements/R for Data Science")
@@ -23,4 +24,9 @@ plot1 <- plot1 + ylim(0, 50)
 plot1 <- plot1 + scale_x_continuous(labels = comma)
 plot1 <- plot1 + ggsave("output/co2_emissions_by_gdp_1967.png")
 show(plot1)
+
+# generate interactive plotly plot and export as HTML
+interactive <- ggplotly(plot1)
+htmlwidgets::saveWidget(as_widget(interactive), "output/co2_emissions_by_gdp_1967.html")
+
 
