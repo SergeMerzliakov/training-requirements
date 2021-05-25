@@ -7,14 +7,13 @@ library(scales)
 rm(list=ls())
 setwd("~/dev/training-requirements/R for Data Science")
 gapminder <- as.tibble(read_csv("gapminder_clean.csv"))
-names(gapminder)[1]<-"id"
-
+names(gapminder)[5]<-"CO2emissions"
 
 # STEP 2 - Filter the data to include only rows where Year is 1962 and then make a scatter plot comparing 'CO2 emissions (metric tons per capita)' and gdpPercap for the filtered data.
 gapminder_1962 <- gapminder %>%
   filter(Year==1962)
 
-plot1 <- ggplot(gapminder_1962, aes(x=gdpPercap,y=`CO2 emissions (metric tons per capita)`, size=pop, color=continent))
+plot1 <- ggplot(gapminder_1962, aes(x=gdpPercap,y=CO2emissions, size=pop, color=continent))
 plot1 <- plot1 + geom_point()
 plot1 <- plot1 + scale_x_log10()
 plot1 <- plot1 + ggtitle("CO2 Emissions By GDP/Capita - 1962")

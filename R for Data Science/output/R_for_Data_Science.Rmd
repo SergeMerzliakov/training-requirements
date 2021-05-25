@@ -9,22 +9,37 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+### Overview
+This report details an analysis of the GapMinder data, containing various economic statistics for countries across the world, from 1962 to 2007
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+### Question 1 - Relationship Between Continents and Energy Use 
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+There was a distinct difference in energy use between continents, as there was a strong link between GDP Per Capita and energy usage (Graph 1). Continents with a lot of developed nations such as Europe and Oceania consistently had higher energy usage through the period 1962-2007. Energy usage also increased for most continents over time.
 
-```{r cars}
-summary(cars)
-```
 
-## Including Plots
+![Graph 1](q1_energy_use_and_gdp.png){width=48%}
 
-You can also embed plots, for example:
+### Question 2 - Difference between Europe and Asia Imports after 1990 
 
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+### Question 3
+TODO
+
+### Question 4
+TODO
+
+### Appendix - Analysis Details
+
+#### Question 1 - Details
+
+##### Issue 1: Missing Data in Oldest Records
+From 1962 to 1967, both Americas and the Asian continents data only included developed nations such as USA, Canada and Japan, leading to very high median energy usages. From 1972, less developed nations energy usage data was added, leading to large drops in median energy usage for Asia and the Americas.
+
+##### Issue 2: High variability of data by continent
+A review of the energy use by continent revealed that several continents contained developed nations from the [G12](https://en.wikipedia.org/wiki/Group_of_Twelve), all of which have much higher energy usage than developing nations. These nations represented outliers, making the median a better measure for all summary statistics.
+
+The graphs below demonstrate the issue of developed and developing countries in Asia and the Americas for a single year.
+![Graph 2](q1_energyUse_americas_2002.png){width=48%}
+![Graph 3](q1_energyUse_asia_2002.png){width=48%}
+
+

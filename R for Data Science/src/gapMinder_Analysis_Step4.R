@@ -2,7 +2,6 @@ library(dplyr)
 library(readr)
 library(tidyverse)
 
-
 # STEP 4 - On the unfiltered data, answer "In what year is the correlation between 'CO2 emissions (metric tons per capita)' and gdpPercap the strongest?"
 rm(list=ls())
 setwd("~/dev/training-requirements/R for Data Science")
