@@ -4,12 +4,12 @@ library(readr)
 library(tidyverse)
 library(scales)
 library(plotly)
-library(plotly)
+library(here)
 
 # Q1 - What is the relationship between continent and 'Energy use (kg of oil equivalent per capita)'
 graphics.off()
 rm(list=ls())
-setwd("~/dev/training-requirements/R for Data Science")
+set_here()
 gapminder <- as.tibble(read_csv("gapminder_clean.csv"))
 names(gapminder)[2]<-"country"
 names(gapminder)[8]<-"energyUse"

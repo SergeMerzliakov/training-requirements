@@ -3,9 +3,10 @@ library(ggplot2)
 library(readr)
 library(tidyverse)
 library(scales)
+library(here)
 
 rm(list=ls())
-setwd("~/dev/training-requirements/R for Data Science")
+set_here()
 gapminder <- as.tibble(read_csv("gapminder_clean.csv"))
 names(gapminder)[5]<-"CO2emissions"
 

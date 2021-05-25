@@ -4,6 +4,7 @@ library(readr)
 library(tidyverse)
 library(scales)
 library(plotly)
+library(here)
 
 # Q3 - What is the country (or countries) that has the highest 'Population density (people per sq. km of land area)'
 # across all years? (i.e., which country has the highest average ranking in this category across each time
@@ -11,7 +12,7 @@ library(plotly)
 
 graphics.off()
 rm(list=ls())
-setwd("~/dev/training-requirements/R for Data Science")
+set_here()
 gapminder <- as.tibble(read_csv("gapminder_clean.csv"))
 names(gapminder)[2]<-"country"
 names(gapminder)[8]<-"energyUse"
