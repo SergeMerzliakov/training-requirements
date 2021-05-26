@@ -4,13 +4,11 @@ library(readr)
 library(tidyverse)
 library(scales)
 library(plotly)
-library(here)
 
 # Q1 - What is the relationship between continent and 'Energy use (kg of oil equivalent per capita)'
-graphics.off()
 rm(list=ls())
-set_here()
-gapminder <- as.tibble(read_csv("gapminder_clean.csv"))
+setwd("/Users/smerz/dev/training-requirements/R for Data Science/src")
+gapminder <- as_tibble(read_csv("../gapminder_clean.csv"))
 names(gapminder)[2]<-"country"
 names(gapminder)[8]<-"energyUse"
 
@@ -47,7 +45,6 @@ p1 <- ggplot(energyByContinent, aes(x=Year,y=medianEnergyUse, color=continent)) 
   ggsave("output/q1_energy_use_over_time.png")
 show(p1)
 
-#knitr::opts_chunk$set(fig.width=7, fig.height=7)
 interactive <- ggplotly(p1)
 htmlwidgets::saveWidget(as_widget(interactive), "output/q1_energy_use_over_time.html")
 

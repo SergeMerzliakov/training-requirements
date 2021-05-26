@@ -4,14 +4,13 @@ library(readr)
 library(tidyverse)
 library(scales)
 library(plotly)
-library(here)
+
 
 # Q2 - Is there a significant difference between Europe and Asia with respect
 # to 'Imports of goods and services (% of GDP)' in the years after 1990?
 
 graphics.off()
 rm(list=ls())
-set_here()
 gapminder <- as.tibble(read_csv("gapminder_clean.csv"))
 names(gapminder)[2]<-"country"
 names(gapminder)[8]<-"energyUse"

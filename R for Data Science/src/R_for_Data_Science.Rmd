@@ -1,0 +1,239 @@
+---
+title: "R for Data Science"
+author: "Serge Merzliakov"
+date: "22/05/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(tidyverse)
+library(scales)
+library(plotly)
+library(gridExtra)
+library(grid)
+
+
+setwd("~/dev/training-requirements/R for Data Science/src/")
+
+gapminder <- as_tibble(read_csv("../gapminder_clean.csv"))
+names(gapminder)[2]<-"country"
+names(gapminder)[8]<-"energyUse"
+names(gapminder)[12]<-"imports"
+names(gapminder)[16]<-"popDensity"
+```
+### Overview
+This report details an analysis of the GapMinder data, containing various economic statistics for countries across the world, from 1962 to 2007.
+
+### Question 1 - Relationship Between Continents and Energy Use 
+There was a distinct difference in energy use between continents, as there was a strong link between GDP Per Capita and energy usage (Graph 1). Continents with a lot of developed nations such as Europe and Oceania consistently had higher energy usage through the period 1962-2007. Energy usage also increased for most continents over time.
+
+In the graph below, energy user per continent over time shows various trends. One such trend is the difference between the continents with predominantly developed nations (Oceania and Europe), and those consisting of predominantly those of developing countries (Africa). The large drop from 1962 to 1972 for Americas and Asia is due to missing data for developing countries, only rectified in the 1972 data. This leads to the question of suprisingly low median values for Asia and Americas, which includes Japan, Canada and the United States. As these developed economies have much higher energy usages, they are effectively outliers when grouped with their geographical neighbors. So GDP is the hidden factor here, reducing the value of continents as a discriminatory variable.
+
+```{r q1a, echo=FALSE, fig.align='center', warning=FALSE, message = FALSE}
+energyByContinent <- gapminder %>%
+  group_by(Year, continent) %>%
+  summarize(medianEnergyUse = median(energyUse, na.rm=T))
+
+energyByContinent <- drop_na(energyByContinent)
+
+gap2007 <- gapminder %>%
+  filter(Year==2007)
+gap2007 <- drop_na(gap2007)
+
+ebc <- ggplot(energyByContinent, aes(x=Year,y=medianEnergyUse, color=continent)) +
+  geom_line() +
+  labs(y = "Median Energy Use (oil kg/capita)") +
+  labs(x = "Year") +
+  scale_x_continuous(breaks=seq(1962, 2007, by = 5)) + 
+  ggtitle("Graph 1. Energy Use By Continent")
+
+ggplotly(ebc)
+```
+
+To further understand the impacts of GDP on energy use, a sample from a single year (2007) was analyzed. Unremarkably, the relationship between energy use and GDP was positive, and also linear, as demonstrated by the regression line in the graph below. This explains many of the features of energy use by continent shown in Graph 1.
+
+```{r q1b, echo=FALSE, fig.align='center',warning=FALSE, message = FALSE}
+g <- ggplot(gap2007, aes(x=gdpPercap,y=energyUse)) +
+        geom_point() +
+        stat_smooth(method=lm, se = FALSE) +
+        labs(y = "Median Energy Use (oil kg/capita)") +
+        labs(x = "GDP Per Capita") +
+        ggtitle("Graph 2. Energy Use By GDP per Capita (2007)")
+
+ggplotly(g)
+```
+
+
+### Question 2 - Difference between Europe and Asia Imports after 1990 
+Imports were compared between European and Asian imports were compared from 1992 to 2007. There are four sets of data, spaced 5 years apart. Each year was analyzed separately to determined if there was a significant difference in imports. No such difference was found.
+
+More details on the analysis process are detailed in Appendix 2.
+
+``` {r q2, fig.align='center', echo=FALSE, warning=FALSE, message = FALSE, out.height="60%"}
+eurasia <- gapminder %>%
+  filter(Year>1990, continent %in% c("Europe","Asia"))
+
+eurasiaSummary <- eurasia %>%
+  group_by(Year, continent) %>%
+  summarize(medianImports = median(imports, na.rm=T))
+
+# review basic data for obvious trends
+euplot2 <- ggplot(eurasiaSummary , aes(x=continent, y=medianImports, fill=continent)) +
+  geom_col() +
+  facet_wrap(~Year) +
+  labs(x = "Continent") +
+  labs(y = "Imports (% of GDP)") +
+  ggtitle("Graph 3. Imports By Continent and Year")
+
+ggplotly(euplot2)
+
+euplot1 <- ggplot(eurasia, aes(x=continent,y=imports)) +
+  geom_boxplot() +
+  facet_wrap(~Year) +
+  labs(x = "Continent") +
+  labs(y = "Imports (% of GDP)") +
+  ggtitle("Graph 4. Review of Distributions of Imports By Continent and Year") 
+
+ggplotly(euplot1)
+```
+
+### Question 3
+
+
+### Question 4
+TODO
+
+### Appendix 1 - Question 1 Analysis
+
+##### Issue 1: Missing Data in Oldest Records
+From 1962 to 1967, both Americas and the Asian continents data only included developed nations such as USA, Canada and Japan, leading to very high median energy usages. From 1972, less developed nations energy usage data was added, leading to large drops in median energy usage for Asia and the Americas.
+
+##### Issue 2: High variability of data by continent
+A review of the energy use by continent revealed that several continents contained developed nations from the [G12](https://en.wikipedia.org/wiki/Group_of_Twelve), all of which have much higher energy usage than developing nations. These nations represented outliers, making the median a better measure for all summary statistics.
+
+The graphs below demonstrate the issue of developed and developing countries in Asia and the Americas for a single year.
+
+
+```{r Q1issue2, echo=FALSE, warning=FALSE, message = FALSE,  out.height="60%"}
+america2007 <- gapminder %>%
+  filter(Year==2007, continent=="Americas")
+
+asia2007 <- gapminder %>%
+  filter(Year==2007, continent=="Asia")
+
+americas_outlier_x <-IQR(america2007$energyUse, na.rm=TRUE) * 1.5 + quantile(america2007$energyUse, na.rm=TRUE)[4]
+am <- ggplot(america2007, aes(x= energyUse,y=country, size=gdpPercap, color=gdpPercap)) +
+  geom_point() +
+  ggtitle("Energy Use in the Americas (2007)") +
+  labs(x = "Energy Use (Oil kg/Capita)") +
+  labs(y = "Country") +
+  scale_x_continuous(breaks=seq(0, 20000, by = 2000)) +
+  geom_vline(xintercept = americas_outlier_x, linetype = "dashed",color = "blue", size=0.4) +
+  annotate(x=americas_outlier_x,y=+Inf,label="Outlier Boundary",vjust=2,geom="label")
+am
+
+asia_outlier_x <- IQR(asia2007$energyUse, na.rm=TRUE) * 1.5 + quantile(america2007$energyUse, na.rm=TRUE)[4]
+as <- ggplot(asia2007, aes(x=energyUse,y=country, size=gdpPercap, color=gdpPercap)) +
+  geom_point() +
+  ggtitle("Energy Use in Asia (2007)") +
+  labs(x = "Energy Use (Oil kg/Capita)") +
+  labs(y = "Country") +
+  scale_x_continuous(breaks=seq(0, 12000, by = 1000)) +
+  geom_vline(xintercept =asia_outlier_x , linetype = "dashed",color = "blue", size=0.4) +
+  annotate(x=asia_outlier_x,y=+Inf,label="Outlier Boundary",vjust=2,geom="label")
+as
+
+```
+
+### Appendix 2 - Question 2 Analysis
+
+The data was split by year into imports from Asia and Europe. For each year, tests of variance and normality were carried out.
+the data sets for each year where found to be of non-normal distribution and heteroscedastic.
+
+Attempts at data transformation did not have an effect on distribution.
+
+For these reasons, the non-parametric Wilcoxon Rank Sum Test was used to assess if there was a significant difference in imports
+between European and Asian continents.
+
+##### Variance Test
+ The following code was used on a subset of the the data (eurasia), which only contained data from Europe and Asia.
+```
+# test variance across all years
+for(Y in seq(from=1992, to=2007, by=5)){
+  asia <- eurasia %>% filter(continent=="Asia", Year==Y) %>% select(imports)
+  europe <- eurasia %>% filter(continent=="Europe", Year==Y)  %>% select(imports)
+  bt <- var.test(asia$imports, europe$imports)
+  if (bt$p.value > 0.05){
+    print(paste("Year ", Y, " - Samples Have Same Variance p=", bt$p.value))
+  }else{
+    print(paste("Year ", Y, " - Samples Have Different Variance p=",bt$p.value))
+  }
+}
+
+  [1] "Year  1992  - Samples Have Different Variance. p= 0.00176955623068187"
+  [1] "Year  1997  - Samples Have Different Variance. p= 8.32979264644429e-05"
+  [1] "Year  2002  - Samples Have Different Variance. p= 2.99103533047962e-05"
+  [1] "Year  2007  - Samples Have Different Variance. p= 0.000334177202574004"
+```
+
+##### Population Distribution Test
+The following code was used on a subset of the the data (eurasia), which only contained data from Europe and Asia.
+
+```
+for(Y in seq(from=1992, to=2007, by=5)){
+  asia <- eurasia %>% filter(continent=="Asia", Year==Y) %>% select(imports)
+  europe <- eurasia %>% filter(continent=="Europe", Year==Y)  %>% select(imports)
+  shap_asia <- shapiro.test(asia$imports)
+  shap_europe <- shapiro.test(europe$imports)
+
+  if (shap_asia$p.value < 0.05){
+    # accept H1 - Not a Normal Dist.
+    print(paste("Year ", Y, " - Sample is Not Normal Dist p=", shap_asia$p.value))
+  }else{
+    # accept Ho - Dist IS Normal
+    print(paste("Year ", Y, " - Sample is Normal Dist p=", shap_asia$p.value))
+  }
+
+  if (shap_europe$p.value < 0.05){
+    # accept H1 - Not a Normal Dist.
+    print(paste("Year ", Y, " - Sample is Not Normal Dist p=", shap_europe$p.value))
+  }else{
+    # accept Ho - Dist IS Normal
+    print(paste("Year ", Y, " - Sample is Normal Dist p=", shap_europe$p.value))
+  }
+}
+
+  [1] "Year  1992  - Sample is Not Normal Dist p= 0.00729140350741121"
+  [1] "Year  1992  - Sample is Not Normal Dist p= 0.00142220149839726"
+  [1] "Year  1997  - Sample is Not Normal Dist p= 0.00130563941784164"
+  [1] "Year  1997  - Sample is Not Normal Dist p= 0.014404371185735"
+  [1] "Year  2002  - Sample is Not Normal Dist p= 0.000831277264600929"
+  [1] "Year  2002  - Sample is Not Normal Dist p= 0.0310031203840743"
+  [1] "Year  2007  - Sample is Not Normal Dist p= 0.000555960683937061"
+  [1] "Year  2007  - Sample is Normal Dist p= 0.06642536347996"
+```
+
+##### Sample Test
+The Wilcoxon Rank Sum test was used to confirm or exclude any significant difference in exports for each
+year of data collected. The result for all years was that there was no significant difference in exports.
+
+The following code was used on a subset of the the data (eurasia), which only contained data from Europe and Asia.
+
+```
+for(Y in seq(from=1992, to=2007, by=5)) {
+  asia <- eurasia %>% filter(continent=="Asia", Year==Y) %>% select(imports)
+  europe <- eurasia %>% filter(continent=="Europe", Year==Y)  %>% select(imports)
+  wt <- wilcox.test(asia$imports, europe$imports)
+  print(paste("Year ", Y, " - Wilcoxon Rank Sum. p=",wt$p.value))
+}
+
+  [1] "Year  1992  - Wilcoxon Rank Sum. p= 0.491949069483506"
+  [1] "Year  1997  - Wilcoxon Rank Sum. p= 0.333042606763002"
+  [1] "Year  2002  - Wilcoxon Rank Sum. p= 0.902728315090688"
+  [1] "Year  2007  - Wilcoxon Rank Sum. p= 0.400466154282899"
+```  
