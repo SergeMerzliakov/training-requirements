@@ -2,11 +2,10 @@ library(dplyr)
 library(readr)
 library(tidyverse)
 library(scales)
-library(here)
 
 rm(list=ls())
-set_here()
-gapminder <- as.tibble(read_csv("gapminder_clean.csv"))
+setwd("~/dev/training-requirements/R for Data Science/src/")
+gapminder <- as.tibble(read_csv("../gapminder_clean.csv"))
 names(gapminder)[5]<-"CO2emissions"
 
 # STEP 3 - On the filtered data, calculate the pearson correlation of 'CO2 emissions (metric tons per capita)' and gdpPercap
@@ -16,6 +15,9 @@ gapminder_1962 <- gapminder %>%
 correlation <- cor.test(gapminder_1962$CO2emissions, gapminder_1962$gdpPercap) # remove NAs explicitly
 print(correlation)
 
+
+correlation2 <- cor.test(log(gapminder_1962$CO2emissions), log(gapminder_1962$gdpPercap)) # remove NAs explicitly
+print(correlation2)
 #
 # data:  gapminder_1962$CO2emissions and gapminder_1962$gdpPercap
 # t = 25.269, df = 106, p-value < 0.00000000000000022

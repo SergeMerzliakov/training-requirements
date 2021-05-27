@@ -1,7 +1,7 @@
 ---
 title: "R for Data Science"
 author: "Serge Merzliakov"
-date: "22/05/2021"
+date: "28/05/2021"
 output: html_document
 ---
 
@@ -18,17 +18,79 @@ library(gridExtra)
 library(grid)
 library(knitr)
 
+options(scipen=999999)
+
 setwd("~/dev/training-requirements/R for Data Science/src/")
 
 gapminder <- as_tibble(read_csv("../gapminder_clean.csv"))
 names(gapminder)[2]<-"country"
+names(gapminder)[5]<-"CO2emissions"
 names(gapminder)[8]<-"energyUse"
 names(gapminder)[12]<-"imports"
 names(gapminder)[15]<-"lifeExp"
 names(gapminder)[16]<-"popDensity"
 ```
-### Overview
+## Overview
 This report details an analysis of the GapMinder data, containing various economic statistics for countries across the world, from 1962 to 2007.
+
+### GapMinder Data Set Analysis
+
+#### Scatter Plot - Emissions By GDP Per Capita (1962)
+After applying a logarithmic transform to both axes, a linear relationship is suggested on visual inspection.
+
+```{r a, echo=FALSE, fig.align="center",warning=FALSE, message=FALSE,out.width="60%",out.height="60%" }
+gapminder1962 <- gapminder %>%
+  filter(Year==1962) %>%
+  mutate(across(is.numeric, ~ round(., 2)))
+
+scatter62log <- ggplot(gapminder1962, aes(x=gdpPercap,y=CO2emissions, size=pop)) +
+  geom_point() + 
+  scale_x_log10(labels = comma) + 
+  scale_y_log10() + 
+  stat_smooth(method=lm, se=F) + 
+  ggtitle("CO2 Emissions By GDP/Capita - 1962") + 
+  labs(y = "Log CO2 Emissions (tons/Capita)") + 
+  labs(x = "Log GDP/Capita (International Dollars)")
+
+ggplotly(scatter62log)
+```
+
+#### Correlation Between 1962 Emissions and GDP Per Capita
+After a log transformation of both variables, a strong positive correlation was found, with a value 0.86. This strongly suggests that wealthier nations emit more carbon dioxide.
+```{r b, echo=FALSE, fig.align='center',warning=FALSE, message=FALSE}
+cor.test(log(gapminder1962$CO2emissions), log(gapminder1962$gdpPercap))
+```
+
+#### Strongest Correlation Between Emissions and GDP Per Capita
+The strongest correlation between Emissions and GDP Per Capita was in 2002, with a value of 0.93. The table below shows that the
+correlation was also strongly positive across all the years for which data was available.
+```{r c, echo=FALSE, fig.align='center',warning=FALSE, message=FALSE}
+gapminder_emissions_corr <- gapminder %>%
+  group_by(Year) %>%
+  summarize(pearson_correlation = cor(log(CO2emissions), log(gdpPercap),use="pairwise.complete.obs")) %>%
+  arrange(desc(pearson_correlation))
+
+kable(gapminder_emissions_corr, digits = c(0, 3), col.names=c("Year", "Correlation - Emissions to GDP"), caption="Ranked Correlations By Year", align = "lc", format = "html", table.attr = "style='width:45%;margin-left:20%'")
+```
+
+#### Scatter Plot - Emissions By GDP Per Capita (2002)
+For 2002, the scatter plot demonstrates the strong positive correlation.
+
+```{r d, echo=FALSE, fig.align='center',warning=FALSE, message=FALSE}
+gapminder2002 <- gapminder %>%
+  filter(Year == 2002) %>%
+  mutate(across(is.numeric, ~ round(., 2)))
+
+ plot2002 <- ggplot(gapminder2002, aes(x=gdpPercap,y=CO2emissions, size=pop, color=continent)) + 
+  geom_point() + 
+  scale_x_log10(labels = comma) + 
+  scale_y_log10() + 
+  ggtitle("CO2 Emissions By GDP/Capita - 2002") + 
+  labs(y = "Log CO2 Emissions (Tons/Capita)") + 
+  labs(x = "Log GDP/Capita (International Dollars)")
+ 
+ggplotly(plot2002)
+```
 
 ### Question 1 - Relationship Between Continents and Energy Use 
 There was a distinct difference in energy use between continents, as there was a strong link between GDP Per Capita and energy usage (Graph 1). Continents with a lot of developed nations such as Europe and Oceania consistently had higher energy usage through the period 1962-2007. Energy usage also increased for most continents over time.
@@ -123,13 +185,14 @@ rankedMeanDensity <-  gapDensity %>%
   arrange(desc(meanDensity)) %>%
   mutate(across(is.numeric, ~ round(., 0)))
 
-kable(rankedMeanDensity[1:5,c(1,12)], col.names=c("Country", "Average Population Density"), caption="Top 10 Nations By Population Density (1962-2007)", align = "lc", format = "html", table.attr = "style='width:55%;margin-left:15%'")
+kable(rankedMeanDensity[1:5,c(1,12)], col.names=c("Country", "Average Population Density"), caption="Top 5 Nations By Population Density (1962-2007)", align = "lc", format = "html", table.attr = "style='width:55%;margin-left:15%'")
 ```
 
 
 ### Question 4
 The greatest absolute increase in life expectancy occurred in the Maldives, with a 37 year increase between 1962 and 2007. As a percentage, however, Bhutan's life expectancy increased 100%, from 33 to 66 years.
 
+The tables below show the top 5 life expectancy increases.
 ``` {r q4, echo=FALSE, warning=FALSE, message=FALSE}
 lifeExpCore <- gapminder %>%
             select(Year, country, lifeExp ) %>%
