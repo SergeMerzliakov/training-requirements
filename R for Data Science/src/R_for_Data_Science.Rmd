@@ -16,7 +16,7 @@ library(scales)
 library(plotly)
 library(gridExtra)
 library(grid)
-
+library(knitr)
 
 setwd("~/dev/training-requirements/R for Data Science/src/")
 
@@ -34,15 +34,17 @@ There was a distinct difference in energy use between continents, as there was a
 
 In the graph below, energy user per continent over time shows various trends. One such trend is the difference between the continents with predominantly developed nations (Oceania and Europe), and those consisting of predominantly those of developing countries (Africa). The large drop from 1962 to 1972 for Americas and Asia is due to missing data for developing countries, only rectified in the 1972 data. This leads to the question of suprisingly low median values for Asia and Americas, which includes Japan, Canada and the United States. As these developed economies have much higher energy usages, they are effectively outliers when grouped with their geographical neighbors. So GDP is the hidden factor here, reducing the value of continents as a discriminatory variable.
 
-```{r q1a, echo=FALSE, fig.align='center', warning=FALSE, message = FALSE}
+```{r q1a, echo=FALSE, fig.align='center', warning=FALSE, message=FALSE}
 energyByContinent <- gapminder %>%
   group_by(Year, continent) %>%
-  summarize(medianEnergyUse = median(energyUse, na.rm=T))
+  summarize(medianEnergyUse = median(energyUse, na.rm=T)) %>%
+  mutate(across(is.numeric, ~ round(., 0))) 
 
 energyByContinent <- drop_na(energyByContinent)
 
 gap2007 <- gapminder %>%
-  filter(Year==2007)
+  filter(Year==2007) %>%
+  mutate(across(is.numeric, ~ round(., 0))) 
 gap2007 <- drop_na(gap2007)
 
 ebc <- ggplot(energyByContinent, aes(x=Year,y=medianEnergyUse, color=continent)) +
@@ -57,7 +59,7 @@ ggplotly(ebc)
 
 To further understand the impacts of GDP on energy use, a sample from a single year (2007) was analyzed. Unremarkably, the relationship between energy use and GDP was positive, and also linear, as demonstrated by the regression line in the graph below. This explains many of the features of energy use by continent shown in Graph 1.
 
-```{r q1b, echo=FALSE, fig.align='center',warning=FALSE, message = FALSE}
+```{r q1b, echo=FALSE, fig.align='center',warning=FALSE, message=FALSE}
 g <- ggplot(gap2007, aes(x=gdpPercap,y=energyUse)) +
         geom_point() +
         stat_smooth(method=lm, se = FALSE) +
@@ -70,18 +72,21 @@ ggplotly(g)
 
 
 ### Question 2 - Difference between Europe and Asia Imports after 1990 
-Imports were compared between European and Asian imports were compared from 1992 to 2007. There are four sets of data, spaced 5 years apart. Each year was analyzed separately to determined if there was a significant difference in imports. No such difference was found.
+Imports were compared between European and Asian imports were compared from 1992 to 2007. There are four sets of data, spaced 5 years apart. Whilst 
+there is some variation in exports from year to year, the differences where not significant.
 
 More details on the analysis process are detailed in Appendix 2.
 
-``` {r q2, fig.align='center', echo=FALSE, warning=FALSE, message = FALSE, out.height="60%"}
+``` {r q2, fig.align='center', echo=FALSE, warning=FALSE, message=FALSE, out.height="60%"}
 eurasia <- gapminder %>%
-  filter(Year>1990, continent %in% c("Europe","Asia"))
+  filter(Year>1990, continent %in% c("Europe","Asia"))  %>%
+  mutate(across(is.numeric, ~ round(., 0)))
 
 eurasiaSummary <- eurasia %>%
   group_by(Year, continent) %>%
-  summarize(medianImports = median(imports, na.rm=T))
-
+  summarize(medianImports = median(imports, na.rm=T))  %>%
+  mutate(across(is.numeric, ~ round(., 0)))
+  
 # review basic data for obvious trends
 euplot2 <- ggplot(eurasiaSummary , aes(x=continent, y=medianImports, fill=continent)) +
   geom_col() +
@@ -103,6 +108,22 @@ ggplotly(euplot1)
 ```
 
 ### Question 3
+The country with the highest mean ranking across all times is the Macao Special Administrative Region (SAR), followed by Monaco and Hong Kong SAR.
+
+The top 10 nations are detailed in the table below.
+``` {r q3, echo=FALSE, warning=FALSE, message=FALSE, out.width="60%"}
+gapDensity <- gapminder %>%
+  filter(!is.na(country), is.finite(popDensity)) %>%
+  select(country, Year, popDensity) %>%
+  spread(Year, popDensity)
+
+rankedMeanDensity <-  gapDensity %>%
+  mutate(meanDensity = rowMeans(gapDensity[,-1])) %>%
+  arrange(desc(meanDensity)) %>%
+  mutate(across(is.numeric, ~ round(., 0)))
+
+kable(rankedMeanDensity[1:10,c(1,12)], caption="Top 10 Nations By Population Density (per sq km)")
+```
 
 
 ### Question 4
@@ -119,7 +140,7 @@ A review of the energy use by continent revealed that several continents contain
 The graphs below demonstrate the issue of developed and developing countries in Asia and the Americas for a single year.
 
 
-```{r Q1issue2, echo=FALSE, warning=FALSE, message = FALSE,  out.height="60%"}
+```{r Q1issue2, echo=FALSE, warning=FALSE, message=FALSE,  out.height="60%"}
 america2007 <- gapminder %>%
   filter(Year==2007, continent=="Americas")
 
@@ -161,30 +182,26 @@ For these reasons, the non-parametric Wilcoxon Rank Sum Test was used to assess 
 between European and Asian continents.
 
 ##### Variance Test
- The following code was used on a subset of the the data (eurasia), which only contained data from Europe and Asia.
-```
-# test variance across all years
+ The following code was used on a subset of the the data (eurasia), which only contained data from Europe and Asia, test variance across all years. Both Asian and European data sets across all years were found to heteroscedastic.
+ 
+```{r Q2vartest, echo=TRUE, warning=FALSE, message=FALSE}
 for(Y in seq(from=1992, to=2007, by=5)){
   asia <- eurasia %>% filter(continent=="Asia", Year==Y) %>% select(imports)
   europe <- eurasia %>% filter(continent=="Europe", Year==Y)  %>% select(imports)
   bt <- var.test(asia$imports, europe$imports)
-  if (bt$p.value > 0.05){
-    print(paste("Year ", Y, " - Samples Have Same Variance p=", bt$p.value))
-  }else{
+  if (bt$p.value < 0.05){
     print(paste("Year ", Y, " - Samples Have Different Variance p=",bt$p.value))
+  }else{
+    print(paste("Year ", Y, " - Samples Have Same Variance p=", bt$p.value))
   }
 }
 
-  [1] "Year  1992  - Samples Have Different Variance. p= 0.00176955623068187"
-  [1] "Year  1997  - Samples Have Different Variance. p= 8.32979264644429e-05"
-  [1] "Year  2002  - Samples Have Different Variance. p= 2.99103533047962e-05"
-  [1] "Year  2007  - Samples Have Different Variance. p= 0.000334177202574004"
 ```
 
 ##### Population Distribution Test
-The following code was used on a subset of the the data (eurasia), which only contained data from Europe and Asia.
+After the comparison of variances, the samples were assessed to see if they had a normal distribution.The following code was used on a subset of the data (eurasia), which only contained data from Europe and Asia. The data was found to have distributions which were NOT normal.
 
-```
+``` {r Q2disttest, echo=TRUE, warning=FALSE, message=FALSE}
 for(Y in seq(from=1992, to=2007, by=5)){
   asia <- eurasia %>% filter(continent=="Asia", Year==Y) %>% select(imports)
   europe <- eurasia %>% filter(continent=="Europe", Year==Y)  %>% select(imports)
@@ -192,48 +209,33 @@ for(Y in seq(from=1992, to=2007, by=5)){
   shap_europe <- shapiro.test(europe$imports)
 
   if (shap_asia$p.value < 0.05){
-    # accept H1 - Not a Normal Dist.
-    print(paste("Year ", Y, " - Sample is Not Normal Dist p=", shap_asia$p.value))
+    print(paste("Year ", Y, " - Asia Sample is not Normal Dist p=", shap_asia$p.value))
   }else{
-    # accept Ho - Dist IS Normal
-    print(paste("Year ", Y, " - Sample is Normal Dist p=", shap_asia$p.value))
+    print(paste("Year ", Y, " - Assia sample has Normal Dist p=", shap_asia$p.value))
   }
 
   if (shap_europe$p.value < 0.05){
-    # accept H1 - Not a Normal Dist.
-    print(paste("Year ", Y, " - Sample is Not Normal Dist p=", shap_europe$p.value))
+    print(paste("Year ", Y, " - Europe sample is Not Normal Dist p=", shap_europe$p.value))
   }else{
-    # accept Ho - Dist IS Normal
-    print(paste("Year ", Y, " - Sample is Normal Dist p=", shap_europe$p.value))
+    print(paste("Year ", Y, " - Europe sample has Normal Dist p=", shap_europe$p.value))
   }
 }
-
-  [1] "Year  1992  - Sample is Not Normal Dist p= 0.00729140350741121"
-  [1] "Year  1992  - Sample is Not Normal Dist p= 0.00142220149839726"
-  [1] "Year  1997  - Sample is Not Normal Dist p= 0.00130563941784164"
-  [1] "Year  1997  - Sample is Not Normal Dist p= 0.014404371185735"
-  [1] "Year  2002  - Sample is Not Normal Dist p= 0.000831277264600929"
-  [1] "Year  2002  - Sample is Not Normal Dist p= 0.0310031203840743"
-  [1] "Year  2007  - Sample is Not Normal Dist p= 0.000555960683937061"
-  [1] "Year  2007  - Sample is Normal Dist p= 0.06642536347996"
 ```
 
 ##### Sample Test
-The Wilcoxon Rank Sum test was used to confirm or exclude any significant difference in exports for each
-year of data collected. The result for all years was that there was no significant difference in exports.
+Since the data is heteroscedastic, with a non-Normal distribution, the Wilcoxon Rank Sum test was used to confirm or exclude any 
+significant difference in exports for each year of data collected. 
 
-The following code was used on a subset of the the data (eurasia), which only contained data from Europe and Asia.
+The following code was used on a subset of the data (eurasia), which only contained data from Europe and Asia.
 
-```
+The result for all years was that there was NO significant difference in exports between Asia and Europe.
+
+``` {r Q2wilctest, echo=TRUE, warning=FALSE, message=FALSE}
 for(Y in seq(from=1992, to=2007, by=5)) {
   asia <- eurasia %>% filter(continent=="Asia", Year==Y) %>% select(imports)
   europe <- eurasia %>% filter(continent=="Europe", Year==Y)  %>% select(imports)
   wt <- wilcox.test(asia$imports, europe$imports)
   print(paste("Year ", Y, " - Wilcoxon Rank Sum. p=",wt$p.value))
 }
-
-  [1] "Year  1992  - Wilcoxon Rank Sum. p= 0.491949069483506"
-  [1] "Year  1997  - Wilcoxon Rank Sum. p= 0.333042606763002"
-  [1] "Year  2002  - Wilcoxon Rank Sum. p= 0.902728315090688"
-  [1] "Year  2007  - Wilcoxon Rank Sum. p= 0.400466154282899"
 ```  
+
