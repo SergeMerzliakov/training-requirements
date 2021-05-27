@@ -24,6 +24,7 @@ gapminder <- as_tibble(read_csv("../gapminder_clean.csv"))
 names(gapminder)[2]<-"country"
 names(gapminder)[8]<-"energyUse"
 names(gapminder)[12]<-"imports"
+names(gapminder)[15]<-"lifeExp"
 names(gapminder)[16]<-"popDensity"
 ```
 ### Overview
@@ -108,10 +109,10 @@ ggplotly(euplot1)
 ```
 
 ### Question 3
-The country with the highest mean ranking across all times is the Macao Special Administrative Region (SAR), followed by Monaco and Hong Kong SAR.
+The country with the highest mean ranking for population density between 1962 and 2007 is the Macao Special Administrative Region (SAR), followed by Monaco and Hong Kong SAR.
 
-The top 10 nations are detailed in the table below.
-``` {r q3, echo=FALSE, warning=FALSE, message=FALSE, out.width="60%"}
+The top 5 nations are detailed in the table below.
+``` {r q3, echo=FALSE, warning=FALSE, message=FALSE}
 gapDensity <- gapminder %>%
   filter(!is.na(country), is.finite(popDensity)) %>%
   select(country, Year, popDensity) %>%
@@ -122,12 +123,34 @@ rankedMeanDensity <-  gapDensity %>%
   arrange(desc(meanDensity)) %>%
   mutate(across(is.numeric, ~ round(., 0)))
 
-kable(rankedMeanDensity[1:10,c(1,12)], caption="Top 10 Nations By Population Density (per sq km)")
+kable(rankedMeanDensity[1:5,c(1,12)], col.names=c("Country", "Average Population Density"), caption="Top 10 Nations By Population Density (1962-2007)", align = "lc", format = "html", table.attr = "style='width:55%;margin-left:15%'")
 ```
 
 
 ### Question 4
-TODO
+The greatest absolute increase in life expectancy occurred in the Maldives, with a 37 year increase between 1962 and 2007. As a percentage, however, Bhutan's life expectancy increased 100%, from 33 to 66 years.
+
+``` {r q4, echo=FALSE, warning=FALSE, message=FALSE}
+lifeExpCore <- gapminder %>%
+            select(Year, country, lifeExp ) %>%
+            spread(Year, lifeExp)
+
+lifeExpAbsolute <- lifeExpCore %>%
+    mutate(lifeExpIncrease = `2007` - `1962`) %>%
+    mutate(across(is.numeric, ~ round(., 1))) %>%
+    arrange(desc(lifeExpIncrease))
+
+lifeExpPercent <- lifeExpCore %>%
+    mutate(lifeExpIncreasePercent = (`2007` - `1962`)/`1962` * 100) %>%
+    mutate(across(is.numeric, ~ round(., 1))) %>%
+    arrange(desc(lifeExpIncreasePercent))
+
+# Q4 What country (or countries) has shown the greatest increase in 'Life expectancy at birth, total (years)' since 1962?
+kable(lifeExpAbsolute[1:5,c(1,2,11,12)], col.names=c("Country", "1962", "2007", "Life Expectancy Increase in Years"), caption="Absolute Increase in Life Expectancy", align = "lccc")
+
+kable(lifeExpPercent[1:5,c(1,2,11, 12)], col.names=c("Country", "1962", "2007", "Life Expectancy % Increase"), caption="Increase in Life Expectancy By Percentage", align = "lccc")
+```
+
 
 ### Appendix 1 - Question 1 Analysis
 
