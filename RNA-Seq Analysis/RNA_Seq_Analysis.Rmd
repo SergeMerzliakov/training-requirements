@@ -91,7 +91,7 @@ dds_pca <- prcomp(pca_data)
 pca_sum <-summary(dds_pca)
 print(pca_sum) # todo fix wrap
 ```
-A Principal Component Analysis (PCA) was performed on the data which showed that first two components explain `r round(pca_sum$importance[3,2] * 100, 0)`% of the variance, and the first four components approximately `r `round(pca_sum$importance[3,4] * 100, 0)`%.
+A Principal Component Analysis (PCA) was performed on the data which showed that first two components explain `r round(pca_sum$importance[3,2] * 100, 0)`% of the variance, and the first four components approximately `r round(pca_sum$importance[3,4] * 100, 0)`%.
 
 TODO - more talk re PC1 and PC2
 TODO - more talk re PC1 and PC2
@@ -175,6 +175,7 @@ print(round(duration, 2))
 
 
 #### TODO
+add process steps here?
 source + reproducbility
 https://trace.ncbi.nlm.nih.gov/Traces/study/?acc=SRP034009
 
