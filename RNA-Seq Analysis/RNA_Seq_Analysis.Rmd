@@ -217,10 +217,34 @@ norm_counts <- data.frame(counts(dds, normalized=T))
 
 # top 20 overexpressed
 dds_res_sig_overexp <- dds_res_df %>%
-  filter(log2FoldChange > L2FC_THRESHOLD, padj < P_THRESHOLD) %>% # TODO already done, remove
-  slice_max(n=TOP_N, order_by=log2FoldChange, with_ties=F)
+  filter(log2FoldChange > L2FC_THRESHOLD, padj < P_THRESHOLD) %>% # TODO already done, remove padj clause
+  slice_max(n=TOP_N, order_by=log2FoldChange, with_ties=F) 
 
+# top 20 underexpressed
+dds_res_sig_underexp <- dds_res_df %>%
+  filter(log2FoldChange < -L2FC_THRESHOLD, padj < P_THRESHOLD) %>% # TODO already done, remove padj clause
+  slice_min(n=TOP_N, order_by=log2FoldChange, with_ties=F)
 
+dds_res_sig <- rbind(dds_res_sig_overexp,dds_res_sig_underexp)
+
+sig_norm_counts <- norm_counts[dds_res_sig$ensgene,]
+
+dds_metadata <- data.frame(condition=rse_gene@colData$condition)
+
+rownames(dds_metadata) <- colnames(sig_norm_counts)
+
+gene_symbols <- dds_res_sig$symbol
+
+ph_overexpressed <- pheatmap(sig_norm_counts,
+                             cluster_rows=T,
+                             show_rownames=T,
+                             labels_row = gene_symbols,
+                             labels_col = rse_gene@colData$title,
+                             annotation_col=dplyr::select(dds_metadata, condition),
+                             scale="row",
+                             main= "Top 20 Over/Under Expressed Genes")
+
+show(ph_overexpressed)
 ```
 
 
