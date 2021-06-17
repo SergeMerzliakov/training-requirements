@@ -17,6 +17,17 @@ BiocManager::install(c("dplyr", "AnnotationDbi", "org.Hs.eg.db", "DESeq2", "tibb
 
 library(DESeq2)
 library(ggplot2)
+library(annotables)
+library(gridExtra)
+library(BiocParallel)
+library(dplyr)
+library(tibble)
+library(data.table)
+library(stringr)
+library(DT)
+library(org.Hs.eg.db)
+library(fgsea)
+library(pheatmap)
 
 P_THRESHOLD     <- 0.01
 L2FC_THRESHOLD  <- 1
@@ -28,12 +39,11 @@ load('data/SRP034009_rse_gene.Rdata')
 rse_gene@colData$condition <- as.factor(c("Control","Control","Control","Salmonella","Salmonella","Salmonella"))
 dds <- DESeqDataSet(rse_gene, design = ~ condition)
 
-
 keep <- rowSums(counts(dds), na.rm = T) >= LOW_EXPRESSION_THRESHOLD
 dds <- dds[keep,]
 dds_df <- data.frame(counts(dds))
 
-knitr::opts_chunk$set(echo = FALSE, messages=FALSE, warning=FALSE)
+knitr::opts_chunk$set(echo=FALSE, messages=FALSE, warning=FALSE)
 ```
 
 ## Overview
@@ -52,34 +62,28 @@ TODO: experimental design
 3 replicates for Salmonella Infected HeLa cells
 
 
-
-
 ## Assess The Distribution and Suitability for DESeq2 Analysis 
 DESeq2 assumes a negative normal distribution, so the data was checked to assess where this was a valid assumption. The dispersion plot shows that variances exceed the means, so that the use of the DESeq2 algorithm is appropriate.
 
 ```{r assessDist,  warning=FALSE, message=FALSE,fig.height=4, fig.width=4, fig.align='center'}
-library(ggplot2)
 mean_counts <- apply(dds_df[,1:ncol(dds_df)], 1, mean)
 variance_counts <- apply(dds_df[,1:ncol(dds_df)], 1, var)
 
 assess_df <- data.frame(mean_counts, variance_counts)
 
-
 ggplot(assess_df) +
   geom_point((aes(x=mean_counts, y=variance_counts))) +
-  scale_y_log10(labels =scales::scientific) +
-  scale_x_log10(labels = scales::scientific) +
+  scale_y_log10() +
+  scale_x_log10() + # labels = scales::scientific
   xlab("Mean Counts per Gene") +
   ylab("Variance per Gene") +
-  annotation_logticks() +
-  geom_abline(show.legend=FALSE, aes(intercept = 0, slope = 1, colour='red'))
+  annotation_logticks()
 
-rm(assess_df, mean_counts, variance_counts)
+#rm(assess_df, mean_counts, variance_counts)
 ```
 
 ## Principal Component Analysis
 ``` {r pcaData, warning=FALSE, message=FALSE}
-library(DESeq2)
 
 # normalize counts
 dds <- estimateSizeFactors(dds)
@@ -100,7 +104,6 @@ TODO - more talk re PC1 and PC2
 TODO - more talk re PC1 and PC2
 
 ``` {r pcaPlotImp, echo=FALSE, warning=FALSE, message=FALSE, fig.height=6, fig.width=10}
-library(gridExtra)
 
 # because PC1 and PC2 account for only 78% of the variance, we plot the top five PCs, with total of ~91% of variance accounted for
 
@@ -148,14 +151,11 @@ pc_2and3 <- ggplot(pca_df) +
   ylab(paste0("PC3 (", round(varDF[3,2],1),"%)")) +
   scale_colour_manual(values = palette)
 
-grid.arrange(scree_plot,cumul_plot,pc_1and2, pc_2and3 ,ncol=2, nrow=2)
-
+grid.arrange(scree_plot, cumul_plot, pc_1and2, pc_2and3, ncol=2, nrow=2)
 ```
 
-``` {r generateDES, echo=FALSE, message=TRUE}
-library(BiocParallel)
-
-register(MulticoreParam(), default = TRUE)
+``` {r generateDES, echo=FALSE, message=TRUE, cache=TRUE}
+register(SnowParam(), default = TRUE)
 
 start <- Sys.time()
 print(start)
@@ -171,17 +171,7 @@ duration <- Sys.time() - start
 cat("Duration results call is: ")
 print(round(duration, 2))
 
-```
-
-## Volcano Plot
-
-``` {r volcano, warning=FALSE, message=FALSE}
-library(dplyr)
-library(tibble)
-library(annotables)
-
-# TODO move dds_res_df init this the generate block
-dds_res_df <- data.frame(dds_res) %>%
+dds_res_df<- data.frame(dds_res) %>%
               filter(abs(log2FoldChange) > L2FC_THRESHOLD, baseMean >= BASE_MEAN_THRESHOLD, padj < P_THRESHOLD) %>%
               rownames_to_column(var="ensgene") %>%
               mutate(ensgene=sub('\\.[[:digit:]]+', "", ensgene))   # strip off ensemble Id version
@@ -190,6 +180,18 @@ dds_res_df <- dds_res_df %>%
               left_join(x=dds_res_df,
                         y=grch38[,c("ensgene", "symbol", "description")],
                         by="ensgene")
+
+dups <- dds_res_df %>% group_by(ensgene) %>% filter(n() > 1)
+
+if (nrow(dups)>0){
+	print(paste0("dds_res_df has duplicates. All of these are in 'dups'"))
+}
+rm(dups)
+```
+
+## Volcano Plot
+
+``` {r volcano, warning=FALSE, message=FALSE}
 
 volcano <- ggplot(dds_res_df) +
             geom_point(aes(x=log2FoldChange, y=-log10(padj))) +
@@ -201,11 +203,25 @@ volcano <- ggplot(dds_res_df) +
 
 show(volcano)
 
+
 ```
 
 
 ## HeatMap
+``` {r heatmapPost}
 
+TOP_N <- 20
+
+dds <- estimateSizeFactors(dds)
+norm_counts <- data.frame(counts(dds, normalized=T))
+
+# top 20 overexpressed
+dds_res_sig_overexp <- dds_res_df %>%
+  filter(log2FoldChange > L2FC_THRESHOLD, padj < P_THRESHOLD) %>% # TODO already done, remove
+  slice_max(n=TOP_N, order_by=log2FoldChange, with_ties=F)
+
+
+```
 
 
 ## Gene Set Enrichment Analysis
@@ -213,30 +229,23 @@ A Gene Set Enrichment Analysis (GSEA) was done
 TODO
 
 ``` {r gsea, warning=FALSE, message=FALSE}
-library(data.table)
-library(tibble)
-library(stringr)
-library(DT)
-library(org.Hs.eg.db)
-library(fgsea)
-
-dds_res_df <- data.frame(dds_res) %>%
+dds_res_gsea <- data.frame(dds_res) %>%
   rownames_to_column(var="ensgene")
 
-dds_res_df <- dds_res_df %>%
+dds_res_gsea <- dds_res_gsea %>%
   mutate(ensgene=sub('\\.[[:digit:]]+', "", ensgene))
 
 ens2symbol <- AnnotationDbi::select(org.Hs.eg.db,
-                                    keys=dds_res_df$ensgene, 
+                                    keys=dds_res_gsea$ensgene, 
                                     columns="SYMBOL",
                                     keytype="ENSEMBL")
 
 ens2symbol <- as_tibble(ens2symbol)
 # add symbol to DEseqResults
-dds_res_df <- inner_join(dds_res_df, ens2symbol, by=c("ensgene"="ENSEMBL"))
+dds_res_gsea <- inner_join(dds_res_gsea, ens2symbol, by=c("ensgene"="ENSEMBL"))
 
 # symbol + test statistic. Take mean if multiple values for same symbols
-dds_res_df2 <- dds_res_df %>% 
+dds_res_gsea <- dds_res_gsea %>% 
   dplyr::select(SYMBOL, stat) %>% 
   na.omit() %>% 
   distinct() %>% 
@@ -244,7 +253,7 @@ dds_res_df2 <- dds_res_df %>%
   summarize(stat=mean(stat))
 
 # tibble::deframe converts two-column data frames to a named vector or list
-ranks <- deframe(dds_res_df2)
+ranks <- deframe(dds_res_gsea)
 
 # can use mIR or Kegg pathways as well, just download relevant symbols
 pathways.hallmark <- gmtPathways("data/msigdb/h.all.v7.4.symbols.gmt")
@@ -273,6 +282,8 @@ g <- ggplot(fgseaResTidy, aes(reorder(pathway, NES), NES)) +
 
 plot(g)
 
+rm(dds_res_gsea)
+
 ```
 
 ## APPENDIX - Initial Analysis
@@ -283,7 +294,7 @@ add process steps here?
 source + reproducbility
 https://trace.ncbi.nlm.nih.gov/Traces/study/?acc=SRP034009
 
-### Version Details
+## APPENDIX - Version Details
 ```{r versionInfo}
 sessionInfo()
 ```
