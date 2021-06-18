@@ -6,7 +6,7 @@ output:
   html_document:
     toc: TRUE
     toc_float: TRUE
-    toc_depth: 2
+    toc_depth: 3
 theme: readable
 ---
 
@@ -18,6 +18,7 @@ BiocManager::install(c("dplyr", "AnnotationDbi", "org.Hs.eg.db", "DESeq2", "tibb
 
 library(DESeq2)
 library(ggplot2)
+library(plotly)
 library(annotables)
 library(gridExtra)
 library(BiocParallel)
@@ -29,6 +30,7 @@ library(DT)
 library(org.Hs.eg.db)
 library(fgsea)
 library(pheatmap)
+library(here)
 
 P_THRESHOLD     <- 0.01
 L2FC_THRESHOLD  <- 1
@@ -54,37 +56,21 @@ An RNA-seq analysis was conducted on a sample RNA counts sample, which comared g
 ## Conclusion/Results
 TODO findings - top genes etc here somehow
 
+"importance of accounting for the strikingly aberrant characteristics of HeLa cells when designing and interpreting experiments, and has implications for the use of HeLa as a model of human biology." Cervical cells expressibilities,
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3737162/
 
-### Process 
+
+### Process
+[Initial analysis](#Initial) reviewed the counts distribution and found DESeq2 criteria were satisfied.
+
 The analysis was performed using R, using the DEseq2 package for the Differential Gene Expression Analysis (DGE) and the fgsea package for the Gene Set Enrichment Analysis (GSEA).
-TODO: experimental design
 
-3 replicates for control HeLa cells
-3 replicates for Salmonella Infected HeLa cells
+The data was of a two-group experimental design with three replicates each of control (HeLa) and condition (Salmonella-infected HeLa).
 
 
-## Distribution Suitability for DESeq2 Analysis 
-DESeq2 assumes a negative normal distribution, so the data was checked to assess where this was a valid assumption. The dispersion plot shows that variances exceed the means, so that the use of the DESeq2 algorithm is appropriate.
-
-```{r assessDist,  warning=FALSE, message=FALSE,fig.height=4, fig.width=4, fig.align='center'}
-mean_counts <- apply(dds_df[,1:ncol(dds_df)], 1, mean)
-variance_counts <- apply(dds_df[,1:ncol(dds_df)], 1, var)
-
-assess_df <- data.frame(mean_counts, variance_counts)
-
-ggplot(assess_df) +
-  geom_point((aes(x=mean_counts, y=variance_counts))) +
-  scale_y_log10() +
-  scale_x_log10() + # labels = scales::scientific
-  xlab("Mean Counts per Gene") +
-  ylab("Variance per Gene") +
-  annotation_logticks()
-
-#rm(assess_df, mean_counts, variance_counts)
-```
 
 ## Principal Component Analysis
-``` {r pcaData, warning=FALSE, message=FALSE}
+``` {r pcaData, echo=FALSE,warning=FALSE, message=FALSE}
 
 # normalize counts
 dds <- estimateSizeFactors(dds)
@@ -97,46 +83,21 @@ pca_data <- t(assay(dds_vst)) ### TODO need t()???
 dds_pca <- prcomp(pca_data)
 
 pca_sum <-summary(dds_pca)
-print(pca_sum) # todo fix wrap
+
 ```
-A Principal Component Analysis (PCA) was performed on the data which showed that first two components explain `r round(pca_sum$importance[3,2] * 100, 0)`% of the variance, and the first four components approximately `r round(pca_sum$importance[3,4] * 100, 0)`%.
+A Principal Component Analysis (PCA) was performed on the data which showed that [first two components](#PCA) explain `r round(pca_sum$importance[3,2] * 100, 0)`% of the variance, and the [first four components](#PCA) approximately `r round(pca_sum$importance[3,4] * 100, 0)`%.
 
-TODO - more talk re PC1 and PC2
-TODO - more talk re PC1 and PC2
+The component plots strong differentiation on the PC1 axis for the control and condition groups, with clustering for the control replicates, and Salmonella replicates split into two clusters. TODO why?
 
-``` {r pcaPlotImp, echo=FALSE, warning=FALSE, message=FALSE, fig.height=6, fig.width=10}
+The interactions between the PC2 and PC3 are less marked, with clustering of the control replicates only. The remaining principle components provided no useful insights on the variance of Salmonella replicates.
 
-# because PC1 and PC2 account for only 78% of the variance, we plot the top five PCs, with total of ~91% of variance accounted for
+``` {r pcaPlotImp, echo=FALSE, warning=FALSE, message=FALSE, fig.height=4, fig.width=10}
+
+pca_df <- data.frame(condition=rse_gene@colData$condition, dds_pca$x)
 
 varExp <- pca_sum$importance[2,] * 100
 # better screen plot variance as % for each PC. Convert to DF for GGPLOT
 varDF = data.frame(Component=1:length(1:length(varExp)), varExp=varExp)
-
-# scree plot - home made  by me because its nicer
-scree_plot <- ggplot(varDF,aes(x=Component,y=varExp)) +
-       geom_col(fill="steelblue") +
-       theme_bw() + scale_x_continuous(breaks=seq(0, length(varExp), by = 1)) +
-       scale_y_continuous(breaks=seq(0, 100, by = 5)) +
-       ylab("% Variance") +
-       xlab("Principal Component")
-
-# cumulative variance plot
-cumul_prop <- pca_sum$importance[3,] * 100
-cumul_df <- data.frame(cumulativeProp = cumul_prop)
-cumul_plot <- ggplot(cumul_df, aes(x=c(1:nrow(cumul_df)), y=cumulativeProp)) + geom_point() +
-  scale_y_continuous(breaks=seq(0, 100, by = 10)) +
-  xlab("Principal Component") +
-  ylab("% Cumulative Variance") +
-  geom_hline(yintercept = 90, linetype = "dashed",color = "blue", size=0.4) +
-  scale_x_continuous(breaks=c(1:nrow(cumul_df))) +
-  expand_limits(y = 0)
-
-# PC 1 64%, PC2 12%
-# NOTE PlotPCA != prcomp, asDESeq2 first sort the rows by variance,
-# select the top NTOP (if by default 500, not all genes) and only then call prcomp
-# if ntop = "# genes" then plotPCA gives same value as prcomp
-
-pca_df <- data.frame(condition=rse_gene@colData$condition, dds_pca$x)
 
 palette <- c("Control" = "#ff0000", "Salmonella" = "#0000ff")
 
@@ -152,7 +113,7 @@ pc_2and3 <- ggplot(pca_df) +
   ylab(paste0("PC3 (", round(varDF[3,2],1),"%)")) +
   scale_colour_manual(values = palette)
 
-grid.arrange(scree_plot, cumul_plot, pc_1and2, pc_2and3, ncol=2, nrow=2)
+grid.arrange(pc_1and2, pc_2and3, ncol=2, nrow=1)
 ```
 
 ``` {r generateDES, echo=FALSE, message=TRUE, cache=TRUE}
@@ -191,6 +152,7 @@ rm(dups)
 ```
 
 ## Volcano Plot
+Shows significant points only Shows significant points onlyShows significant points only
 
 ``` {r volcano, warning=FALSE, message=FALSE, fig.height=4, fig.width=4}
 
@@ -253,7 +215,7 @@ show(ph_overexpressed)
 A Gene Set Enrichment Analysis (GSEA) was done 
 TODO
 
-``` {r gsea, warning=FALSE, message=FALSE, fig.height=4, fig.width=4}
+``` {r gsea, warning=FALSE, message=FALSE, fig.height=4, fig.width=8}
 dds_res_gsea <- data.frame(dds_res) %>%
   rownames_to_column(var="ensgene")
 
@@ -311,15 +273,63 @@ rm(dds_res_gsea)
 
 ```
 
-## APPENDIX - Initial Analysis
+## APPENDIX
 
+### Initial Analysis {#Initial}
+
+DESeq2 assumes a negative normal distribution, so the data was checked to assess where this was a valid assumption. The dispersion plot shows that variances exceed the means, satisfying the requirement for accepting the negative binomial distribution assumption.
+
+```{r assessDist,  warning=FALSE, message=FALSE,fig.height=4, fig.width=6, fig.align='center'}
+mean_counts <- apply(dds_df[,1:ncol(dds_df)], 1, mean)
+variance_counts <- apply(dds_df[,1:ncol(dds_df)], 1, var)
+
+assess_df <- data.frame(mean_counts, variance_counts)
+
+ggplot(assess_df) +
+        geom_point((aes(x=mean_counts, y=variance_counts))) +
+        scale_y_log10(labels = scales::scientific) +
+        scale_x_log10(labels = scales::scientific) +
+        xlab("Mean Counts per Gene") +
+        ylab("Variance per Gene") +
+        annotation_logticks()
+
+rm(assess_df, mean_counts, variance_counts)
+```
+
+### PCA {#PCA}
+
+The PCA analysis showed that the first 2 components contained the most useful explanatory information.
+``` {r pcaAppx}
+print(pca_sum)
+
+# scree plot - home made  by me because its nicer
+scree_plot <- ggplot(varDF,aes(x=Component,y=varExp)) +
+       geom_col(fill="steelblue") +
+       theme_bw() + scale_x_continuous(breaks=seq(0, length(varExp), by = 1)) +
+       scale_y_continuous(breaks=seq(0, 100, by = 5)) +
+       ylab("% Variance") +
+       xlab("Principal Component")
+
+# cumulative variance plot
+cumul_prop <- pca_sum$importance[3,] * 100
+cumul_df <- data.frame(cumulativeProp = cumul_prop)
+cumul_plot <- ggplot(cumul_df, aes(x=c(1:nrow(cumul_df)), y=cumulativeProp)) + geom_point() +
+  scale_y_continuous(breaks=seq(0, 100, by = 10)) +
+  xlab("Principal Component") +
+  ylab("% Cumulative Variance") +
+  geom_hline(yintercept = 90, linetype = "dashed",color = "blue", size=0.4) +
+  scale_x_continuous(breaks=c(1:nrow(cumul_df))) +
+  expand_limits(y = 0)
+
+grid.arrange(scree_plot, cumul_plot)
+```
 
 #### TODO
 add process steps here?
 source + reproducbility
 https://trace.ncbi.nlm.nih.gov/Traces/study/?acc=SRP034009
 
-## APPENDIX - Version Details
+#### Version Details
 ```{r versionInfo}
 sessionInfo()
 ```
