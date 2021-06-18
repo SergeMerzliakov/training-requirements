@@ -152,19 +152,23 @@ rm(dups)
 ```
 
 ## Volcano Plot
-Shows significant points only Shows significant points onlyShows significant points only
+The volcano plot TODO
 
 ``` {r volcano, warning=FALSE, message=FALSE, fig.height=4, fig.width=4}
 
-volcano <- ggplot(dds_res_df) +
-            geom_point(aes(x=log2FoldChange, y=-log10(padj))) +
+dds_res_volcano <- data.frame(dds_res) %>%
+              filter(abs(log2FoldChange) > L2FC_THRESHOLD, baseMean >= BASE_MEAN_THRESHOLD) %>%
+              mutate(threshold = padj < P_THRESHOLD)   # strip off ensemble Id version
+
+volcano <- ggplot(dds_res_volcano) +
+            geom_point(aes(x=log2FoldChange, y=-log10(padj), color=threshold)) +
             xlab("Log2 Fold Change") +
             ylab("-log10 Adjusted p-value") +
-            ylim(c(0,150)) +
-            scale_x_continuous(breaks=seq(-20, 50, by = 2.5)) +
+            ylim(c(0,100)) +
+            scale_x_continuous(breaks=seq(-20, 50, by = 5)) +
             geom_vline(xintercept = 0, linetype = "dashed",color = "black", size=0.4)
 
-show(volcano)
+ggplotly(volcano)
 
 
 ```
