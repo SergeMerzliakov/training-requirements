@@ -1,0 +1,328 @@
+---
+title: "RNA-Seq Analysis"
+author: "Serge Merzliakov"
+date: "27/06/2021"
+output:
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+    toc_depth: 2
+theme: readable
+---
+
+```{r setup, include=FALSE}
+
+options(width = 110)
+
+BiocManager::install(c("dplyr", "AnnotationDbi", "org.Hs.eg.db", "DESeq2", "tibble", "DT", "BiocParallel","ggplot2"))
+
+library(DESeq2)
+library(ggplot2)
+library(annotables)
+library(gridExtra)
+library(BiocParallel)
+library(dplyr)
+library(tibble)
+library(data.table)
+library(stringr)
+library(DT)
+library(org.Hs.eg.db)
+library(fgsea)
+library(pheatmap)
+
+P_THRESHOLD     <- 0.01
+L2FC_THRESHOLD  <- 1
+BASE_MEAN_THRESHOLD <- 20
+LOW_EXPRESSION_THRESHOLD <- 10  # DEBUG - TODO CHANGE BACK to 10!!!!
+
+options(scipen=99999)
+load('data/SRP034009_rse_gene.Rdata')
+rse_gene@colData$condition <- as.factor(c("Control","Control","Control","Salmonella","Salmonella","Salmonella"))
+dds <- DESeqDataSet(rse_gene, design = ~ condition)
+
+keep <- rowSums(counts(dds), na.rm = T) >= LOW_EXPRESSION_THRESHOLD
+dds <- dds[keep,]
+dds_df <- data.frame(counts(dds))
+
+knitr::opts_chunk$set(echo=FALSE, messages=FALSE, warning=FALSE)
+```
+
+## Overview
+
+An RNA-seq analysis was conducted on a sample RNA counts sample, which comared gene expression in HeLa cells infected with Salmonella Typhimurium. This strain of salmonella causes a gastroenteritis in humans. The  data was obtained from Recount2 (Accession number SRP034009)
+
+## Conclusion/Results
+TODO findings - top genes etc here somehow
+
+
+### Process 
+The analysis was performed using R, using the DEseq2 package for the Differential Gene Expression Analysis (DGE) and the fgsea package for the Gene Set Enrichment Analysis (GSEA).
+TODO: experimental design
+
+3 replicates for control HeLa cells
+3 replicates for Salmonella Infected HeLa cells
+
+
+## Distribution Suitability for DESeq2 Analysis 
+DESeq2 assumes a negative normal distribution, so the data was checked to assess where this was a valid assumption. The dispersion plot shows that variances exceed the means, so that the use of the DESeq2 algorithm is appropriate.
+
+```{r assessDist,  warning=FALSE, message=FALSE,fig.height=4, fig.width=4, fig.align='center'}
+mean_counts <- apply(dds_df[,1:ncol(dds_df)], 1, mean)
+variance_counts <- apply(dds_df[,1:ncol(dds_df)], 1, var)
+
+assess_df <- data.frame(mean_counts, variance_counts)
+
+ggplot(assess_df) +
+  geom_point((aes(x=mean_counts, y=variance_counts))) +
+  scale_y_log10() +
+  scale_x_log10() + # labels = scales::scientific
+  xlab("Mean Counts per Gene") +
+  ylab("Variance per Gene") +
+  annotation_logticks()
+
+#rm(assess_df, mean_counts, variance_counts)
+```
+
+## Principal Component Analysis
+``` {r pcaData, warning=FALSE, message=FALSE}
+
+# normalize counts
+dds <- estimateSizeFactors(dds)
+
+# log transformation
+dds_vst <- vst(dds, blind=T)
+
+pca_data <- t(assay(dds_vst)) ### TODO need t()???
+
+dds_pca <- prcomp(pca_data)
+
+pca_sum <-summary(dds_pca)
+print(pca_sum) # todo fix wrap
+```
+A Principal Component Analysis (PCA) was performed on the data which showed that first two components explain `r round(pca_sum$importance[3,2] * 100, 0)`% of the variance, and the first four components approximately `r round(pca_sum$importance[3,4] * 100, 0)`%.
+
+TODO - more talk re PC1 and PC2
+TODO - more talk re PC1 and PC2
+
+``` {r pcaPlotImp, echo=FALSE, warning=FALSE, message=FALSE, fig.height=6, fig.width=10}
+
+# because PC1 and PC2 account for only 78% of the variance, we plot the top five PCs, with total of ~91% of variance accounted for
+
+varExp <- pca_sum$importance[2,] * 100
+# better screen plot variance as % for each PC. Convert to DF for GGPLOT
+varDF = data.frame(Component=1:length(1:length(varExp)), varExp=varExp)
+
+# scree plot - home made  by me because its nicer
+scree_plot <- ggplot(varDF,aes(x=Component,y=varExp)) +
+       geom_col(fill="steelblue") +
+       theme_bw() + scale_x_continuous(breaks=seq(0, length(varExp), by = 1)) +
+       scale_y_continuous(breaks=seq(0, 100, by = 5)) +
+       ylab("% Variance") +
+       xlab("Principal Component")
+
+# cumulative variance plot
+cumul_prop <- pca_sum$importance[3,] * 100
+cumul_df <- data.frame(cumulativeProp = cumul_prop)
+cumul_plot <- ggplot(cumul_df, aes(x=c(1:nrow(cumul_df)), y=cumulativeProp)) + geom_point() +
+  scale_y_continuous(breaks=seq(0, 100, by = 10)) +
+  xlab("Principal Component") +
+  ylab("% Cumulative Variance") +
+  geom_hline(yintercept = 90, linetype = "dashed",color = "blue", size=0.4) +
+  scale_x_continuous(breaks=c(1:nrow(cumul_df))) +
+  expand_limits(y = 0)
+
+# PC 1 64%, PC2 12%
+# NOTE PlotPCA != prcomp, asDESeq2 first sort the rows by variance,
+# select the top NTOP (if by default 500, not all genes) and only then call prcomp
+# if ntop = "# genes" then plotPCA gives same value as prcomp
+
+pca_df <- data.frame(condition=rse_gene@colData$condition, dds_pca$x)
+
+palette <- c("Control" = "#ff0000", "Salmonella" = "#0000ff")
+
+pc_1and2 <- ggplot(pca_df) +
+  geom_point(aes(x=PC1, y=PC2, color = condition)) +
+  xlab(paste0("PC1 (", round(varDF[1,2],1),"%)") ) +
+  ylab(paste0("PC2 (", round(varDF[2,2],1),"%")) +
+  scale_colour_manual(values = palette)
+
+pc_2and3 <- ggplot(pca_df) +
+  geom_point(aes(x=PC2, y=PC3, color = condition)) +
+  xlab(paste0("PC2 (", round(varDF[2,2],1),"%)") ) +
+  ylab(paste0("PC3 (", round(varDF[3,2],1),"%)")) +
+  scale_colour_manual(values = palette)
+
+grid.arrange(scree_plot, cumul_plot, pc_1and2, pc_2and3, ncol=2, nrow=2)
+```
+
+``` {r generateDES, echo=FALSE, message=TRUE, cache=TRUE}
+register(SnowParam(), default = TRUE)
+
+start <- Sys.time()
+print(start)
+dds <- DESeq(dds, parallel = TRUE)
+duration <- Sys.time() - start
+cat("Duration DESeq call is: ")
+print(round(duration, 2))
+
+start <- Sys.time()
+print(start)
+dds_res <- results(dds, parallel = TRUE)
+duration <- Sys.time() - start
+cat("Duration results call is: ")
+print(round(duration, 2))
+
+dds_res_df<- data.frame(dds_res) %>%
+              filter(abs(log2FoldChange) > L2FC_THRESHOLD, baseMean >= BASE_MEAN_THRESHOLD, padj < P_THRESHOLD) %>%
+              rownames_to_column(var="ensgene") %>%
+              mutate(ensgene=sub('\\.[[:digit:]]+', "", ensgene))   # strip off ensemble Id version
+
+dds_res_df <- dds_res_df %>%
+              left_join(x=dds_res_df,
+                        y=grch38[,c("ensgene", "symbol", "description")],
+                        by="ensgene")
+
+dups <- dds_res_df %>% group_by(ensgene) %>% filter(n() > 1)
+
+if (nrow(dups)>0){
+	print(paste0("dds_res_df has duplicates. All of these are in 'dups'"))
+}
+rm(dups)
+```
+
+## Volcano Plot
+
+``` {r volcano, warning=FALSE, message=FALSE, fig.height=4, fig.width=4}
+
+volcano <- ggplot(dds_res_df) +
+            geom_point(aes(x=log2FoldChange, y=-log10(padj))) +
+            xlab("Log2 Fold Change") +
+            ylab("-log10 Adjusted p-value") +
+            ylim(c(0,150)) +
+            scale_x_continuous(breaks=seq(-20, 50, by = 2.5)) +
+            geom_vline(xintercept = 0, linetype = "dashed",color = "black", size=0.4)
+
+show(volcano)
+
+
+```
+
+
+## HeatMap
+``` {r heatmapPost, fig.height=8, fig.width=6}
+
+TOP_N <- 20
+
+dds <- estimateSizeFactors(dds)
+norm_counts <- data.frame(counts(dds, normalized=T))
+
+# top 20 overexpressed
+dds_res_sig_overexp <- dds_res_df %>%
+  filter(log2FoldChange > L2FC_THRESHOLD, padj < P_THRESHOLD) %>% # TODO already done, remove padj clause
+  slice_max(n=TOP_N, order_by=log2FoldChange, with_ties=F) 
+
+# top 20 underexpressed
+dds_res_sig_underexp <- dds_res_df %>%
+  filter(log2FoldChange < -L2FC_THRESHOLD, padj < P_THRESHOLD) %>% # TODO already done, remove padj clause
+  slice_min(n=TOP_N, order_by=log2FoldChange, with_ties=F)
+
+dds_res_sig <- rbind(dds_res_sig_overexp,dds_res_sig_underexp)
+
+sig_norm_counts <- norm_counts[dds_res_sig$ensgene,]
+
+dds_metadata <- data.frame(condition=rse_gene@colData$condition)
+
+rownames(dds_metadata) <- colnames(sig_norm_counts)
+
+gene_symbols <- dds_res_sig$symbol
+
+ph_overexpressed <- pheatmap(sig_norm_counts,
+                             cluster_rows=T,
+                             show_rownames=T,
+                             labels_row = gene_symbols,
+                             labels_col = rse_gene@colData$title,
+                             annotation_col=dplyr::select(dds_metadata, condition),
+                             scale="row",
+                             main= "Top 20 Over/Under Expressed Genes")
+
+show(ph_overexpressed)
+```
+
+
+## Gene Set Enrichment Analysis
+A Gene Set Enrichment Analysis (GSEA) was done 
+TODO
+
+``` {r gsea, warning=FALSE, message=FALSE, fig.height=4, fig.width=4}
+dds_res_gsea <- data.frame(dds_res) %>%
+  rownames_to_column(var="ensgene")
+
+dds_res_gsea <- dds_res_gsea %>%
+  mutate(ensgene=sub('\\.[[:digit:]]+', "", ensgene))
+
+ens2symbol <- AnnotationDbi::select(org.Hs.eg.db,
+                                    keys=dds_res_gsea$ensgene, 
+                                    columns="SYMBOL",
+                                    keytype="ENSEMBL")
+
+ens2symbol <- as_tibble(ens2symbol)
+# add symbol to DEseqResults
+dds_res_gsea <- inner_join(dds_res_gsea, ens2symbol, by=c("ensgene"="ENSEMBL"))
+
+# symbol + test statistic. Take mean if multiple values for same symbols
+dds_res_gsea <- dds_res_gsea %>% 
+  dplyr::select(SYMBOL, stat) %>% 
+  na.omit() %>% 
+  distinct() %>% 
+  group_by(SYMBOL) %>% 
+  summarize(stat=mean(stat))
+
+# tibble::deframe converts two-column data frames to a named vector or list
+ranks <- deframe(dds_res_gsea)
+
+# can use mIR or Kegg pathways as well, just download relevant symbols
+pathways.hallmark <- gmtPathways("data/msigdb/h.all.v7.4.symbols.gmt")
+
+fgseaRes <- fgsea(pathways = pathways.hallmark,
+                  stats    = ranks,
+                  eps      = 0.0,
+                  maxSize  = 100)
+
+fgseaResTidy <- fgseaRes %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+# Show in a nice table
+fgseaResTidy %>% 
+  dplyr::select(-leadingEdge, -ES, -log2err, -pval, -size) %>% 
+  arrange(padj) %>% 
+  DT::datatable()
+
+g <- ggplot(fgseaResTidy, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill=padj<0.05)) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalized Enrichment Score",
+       title="Hallmark pathways NES from GSEA") + 
+  theme_minimal()
+
+plot(g)
+
+rm(dds_res_gsea)
+
+```
+
+## APPENDIX - Initial Analysis
+
+
+#### TODO
+add process steps here?
+source + reproducbility
+https://trace.ncbi.nlm.nih.gov/Traces/study/?acc=SRP034009
+
+## APPENDIX - Version Details
+```{r versionInfo}
+sessionInfo()
+```
+
+
+
