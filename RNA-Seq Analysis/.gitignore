@@ -2,6 +2,5 @@
 .idea/**
 .RData
 .Rhistory
-*.html
 *_cache*
-RNASeq_Analysis_files/*
+
