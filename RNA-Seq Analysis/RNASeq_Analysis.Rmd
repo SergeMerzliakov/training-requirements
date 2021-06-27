@@ -143,8 +143,9 @@ dds_res_df <- dds_res_df %>%
 The table below shows all the significantly differentially expressed genes.
 
 ``` {r degTable}
-# Show all DEG in a table
+# Show all DEG in a table with non-NA padj and log2FC changes
 dds_res_df %>%
+  filter(!is.na(padj), !is.na(log2FoldChange)) %>%
   arrange(padj) %>%
   dplyr::select(symbol, log2FoldChange, padj) %>%
   DT::datatable()
