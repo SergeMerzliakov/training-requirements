@@ -30,11 +30,14 @@ library(DT)
 library(here)
 
 P_THRESHOLD <- 0.05
-
+DATA_DIR <- "data"
 RNA_SEQ_FILE <- "data/rse_gene.Rdata"
 URL_TO_FILE <- "http://duffel.rail.bio/recount/v2/SRP034009/rse_gene.Rdata"
 
 options(scipen=99999)
+
+# create data directory if not already present
+dir.create(file.path(getwd(), DATA_DIR), showWarnings = FALSE)
 
 # load data or fetch if run for the first time
 if (! file.exists(RNA_SEQ_FILE)) {
@@ -365,13 +368,10 @@ print(duplicated_percentage)
 DESeq2 assumes a negative normal distribution, so the data was checked to assess where this was a valid assumption. The dispersion plot shows that variances exceed the means, satisfying the requirement for accepting the negative binomial distribution assumption.
 
 ```{r assessDist, fig.height=4, fig.width=6, fig.align='center'}
-raw_counts <- counts(dds)
-mean_counts <- apply(raw_counts[,1:ncol(raw_counts)], 1, mean)
-variance_counts <- apply(raw_counts[,1:ncol(raw_counts)], 1, var)
+mean_counts <- apply(assay_df[,1:ncol(assay_df)], 1, mean)
+variance_counts <- apply(assay_df[,1:ncol(assay_df)], 1, var)
 
-assess_df <- data.frame(mean_counts, variance_counts)
-
-ggplot(assess_df) +
+ggplot(data.frame(mean_counts, variance_counts)) +
         geom_point((aes(x=mean_counts, y=variance_counts))) +
         scale_y_log10(labels = scales::scientific) +
         scale_x_log10(labels = scales::scientific) +
