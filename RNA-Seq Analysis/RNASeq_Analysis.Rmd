@@ -1,7 +1,7 @@
 ---
 title: "RNA-Seq Analysis"
 author: "Serge Merzliakov"
-date: "24/06/2021"
+date: "26/06/2021"
 output:
   html_document:
     toc: TRUE
@@ -16,11 +16,6 @@ theme: readable
 
 options(width = 110)
 
- if (!requireNamespace('BiocManager', quietly = TRUE))
-    install.packages('BiocManager')
-
-BiocManager::install(c("dplyr", "AnnotationDbi", "org.Hs.eg.db", "DESeq2", "tibble", "DT", "BiocParallel","ggplot2","EnhancedVolcano"))
-
 library(DESeq2)
 library(ggplot2)
 library(ggrepel)
@@ -34,19 +29,22 @@ library(stringr)
 library(DT)
 library(here)
 
-P_THRESHOLD     <- 0.01
-L2FC_THRESHOLD  <- 1
-BASE_MEAN_THRESHOLD <- 20
-LOW_EXPRESSION_THRESHOLD <- 10
+P_THRESHOLD <- 0.05
+
+RNA_SEQ_FILE <- "data/rse_gene.Rdata"
+URL_TO_FILE <- "http://duffel.rail.bio/recount/v2/SRP034009/rse_gene.Rdata"
 
 options(scipen=99999)
-load('data/SRP034009_rse_gene.Rdata')
+
+# load data or fetch if run for the first time
+if (! file.exists(RNA_SEQ_FILE)) {
+	download.file(URL_TO_FILE, destfile=RNA_SEQ_FILE)
+}
+
+load(RNA_SEQ_FILE)
+
 rse_gene@colData$condition <- as.factor(c("Control","Control","Control","Salmonella","Salmonella","Salmonella"))
 dds <- DESeqDataSet(rse_gene, design = ~ condition)
-
-keep <- rowSums(counts(dds), na.rm = T) >= LOW_EXPRESSION_THRESHOLD
-dds <- dds[keep,]
-dds_df <- data.frame(counts(dds))
 
 knitr::opts_chunk$set(echo=FALSE, message=FALSE, warning=FALSE)
 ```
@@ -68,6 +66,7 @@ An DESeq2 analysis was conducted on data comparing gene expression in HeLa-229 c
 |Title:| Transcriptomic profiling of HeLa-229 cells infected with Salmonella Typhimurium |
 |Accession Number:| SRP034009  [https://trace.ncbi.nlm.nih.gov/Traces/study/?acc=SRP034009] |
 |BioProject:| PRJNA231559  [https://www.ncbi.nlm.nih.gov/bioproject/PRJNA231559] |
+|File URL | [http://duffel.rail.bio/recount/v2/SRP034009/rse_gene.Rdata] |
 
 
 ### Experimental Design
@@ -82,22 +81,17 @@ The DESeq2 R package was used to perform the Differential Gene Expression Analys
 * A [HeatMap](#heatmap) was generated for the most over and under expressed genes.
 * A [Gene Set Enrichment Analysis](#gsea) was performed to determine to most significantly expressed pathways.
 
-## Principal Component Analysis
+## Principal Component Analysis {#PCA}
 ``` {r pcaData }
 
 # normalize counts
 dds <- estimateSizeFactors(dds)
 
 # log transformation for large data sets
-dds_vst <- vst(dds, blind=T)
+dds_vst <- vst(dds)
 
-pca_data <- t(assay(dds_vst))
-
-dds_pca <- prcomp(pca_data)
-
-pca_sum <-summary(dds_pca)
 ```
-A Principal Component Analysis (PCA) was performed on the data which showed that [first two components](#PCA) explain `r round(pca_sum$importance[3,2] * 100, 0)`% of the variance, and the [first four components](#PCA) approximately `r round(pca_sum$importance[3,4] * 100, 0)`%.
+A Principal Component Analysis (PCA) was performed on the data which showed that first 2 components  explain TODO 79% of the variance, and the first four components approximately TODO 94%.
 
 The component plots show strong differentiation on the PC1 axis for the control and condition groups, with tight clustering for the control replicates, and Salmonella replicates split into two clusters, with Salmonella Replicate 1 differing from the other 2 Salmonella replicates. The heatmap shows a different pattern of of expression for Salmonella replicate and the analysis discussed in that [section](#heatmap).
 
@@ -105,35 +99,9 @@ The interactions between the PC2 and PC3 are less informative, with clustering o
 
 ``` {r pcaPlotImp, fig.height=4, fig.width=10}
 
-# plot PCA by replicate
-pca_df <- data.frame(replicate=rse_gene@colData$title, dds_pca$x)
+plotPCA(dds_vst)
 
-varExp <- pca_sum$importance[2,] * 100
-varDF = data.frame(Component=1:length(1:length(varExp)), varExp=varExp)
-
-palette <- c("Mock_1" = "#f0b92e", 
-             "Mock_2" = "#ff0000", 
-             "Mock_3" = "#992020",
-             "Salmonella_infected_1" = "#66c4fa",
-             "Salmonella_infected_2" = "#1494de",
-             "Salmonella_infected_3" = "#1414db")
-
-
-pc_1and2 <- ggplot(pca_df) +
-  geom_point(aes(x=PC1, y=PC2, color = replicate)) +
-  xlab(paste0("PC1 (", round(varDF[1,2],1),"%)") ) +
-  ylab(paste0("PC2 (", round(varDF[2,2],1),"%")) +
-  scale_colour_manual(values = palette)
-
-pc_2and3 <- ggplot(pca_df) +
-  geom_point(aes(x=PC2, y=PC3, color = replicate)) +
-  xlab(paste0("PC2 (", round(varDF[2,2],1),"%)") ) +
-  ylab(paste0("PC3 (", round(varDF[3,2],1),"%)")) +
-  scale_colour_manual(values = palette)
-
-grid.arrange(pc_1and2, pc_2and3, ncol=2, nrow=1)
 ```
-
 
 ## DESeq2 Analysis {#analysis}
 
@@ -146,10 +114,10 @@ register(SnowParam(), default = TRUE)
 
 dds <- DESeq(dds, parallel = TRUE)
 dds_res <- results(dds, parallel = TRUE)
+# TODO: need to increase the 'shrinkage' here
 dds_res <- lfcShrink(dds=dds, res=dds_res, type="apeglm", coef = 2)
 
-plotMA(dds_res,
-       alpha = P_THRESHOLD)
+plotMA(dds_res)
 
 dds_res_df<- data.frame(dds_res) %>%
   rownames_to_column(var="ensgene") %>%
@@ -166,6 +134,17 @@ dds_res_df <- dds_res_df %>%
                         by="GENEID") %>%
               mutate(symbol=SYMBOL) %>%
               dplyr::select(-SYMBOL)
+```
+
+
+The table below shows all the significantly differentially expressed genes.
+
+``` {r degTable}
+# Show all DEG in a table
+dds_res_df %>%
+  arrange(padj) %>%
+  dplyr::select(symbol, log2FoldChange, padj) %>%
+  DT::datatable()
 
 ```
 
@@ -190,8 +169,7 @@ volcano_plot <-EnhancedVolcano(dds_res_volcano,
                            y = 'pvalue',
                            xlim = c(-15, 20),
                            title = 'Salmonella Infected Cell DGE',
-                           pCutoff = P_THRESHOLD,
-                           FCcutoff = L2FC_THRESHOLD,
+                           pCutoff = 1E-100,
                            pointSize = 2.0,
                            labSize = 5.0)
 
@@ -209,47 +187,31 @@ library(pheatmap)
 
 TOP_N <- 20
 
-dds <- estimateSizeFactors(dds)
 norm_counts <- data.frame(counts(dds, normalized=T))
 
 # based on brewer.pal(n = 7, name = "RdYlBu")
 hmap_colors <- c("#275591","#91BFDB","#E0F3F8","#FFFFBF","#FEE090","#FC8D59","#D73027")
 
 # top 20 overexpressed
-dds_res_sig_overexp <- dds_res_df %>%
-                       dplyr::filter(log2FoldChange > L2FC_THRESHOLD, 
-                                     baseMean >= BASE_MEAN_THRESHOLD, 
-                                     padj < P_THRESHOLD) %>% 
-                       slice_max(n=TOP_N, order_by=log2FoldChange, with_ties=F) 
+gene_ids <- dds_res_df %>%
+            filter(!is.na(padj)) %>% 
+            arrange(desc(log2FoldChange)) %>% 
+            dplyr::filter(row_number()<= TOP_N | row_number() > n()- TOP_N) %>%
+            dplyr::select(GENEID) %>%
+            deframe()
+         
+sig_norm_counts <- norm_counts[gene_ids,]
 
-# top 20 underexpressed
-dds_res_sig_underexp <- dds_res_df %>%
-                        dplyr::filter(log2FoldChange < -L2FC_THRESHOLD, 
-                                       baseMean >= BASE_MEAN_THRESHOLD, 
-                                       padj < P_THRESHOLD) %>%
-                        slice_min(n=TOP_N, order_by=log2FoldChange, with_ties=F)
-
-dds_res_sig <- rbind(dds_res_sig_overexp, dds_res_sig_underexp)
-
-sig_norm_counts <- norm_counts[dds_res_sig$GENEID,]
-
-dds_metadata <- data.frame(condition=rse_gene@colData$condition)
-
-rownames(dds_metadata) <- colnames(sig_norm_counts)
-
-gene_symbols <- dds_res_sig$symbol
+dds_metadata <- data.frame(condition=rse_gene@colData$condition, row.names = colnames(sig_norm_counts))
 
 heatmap_plot <- pheatmap(sig_norm_counts,
-                          color=hmap_colors,
-                          show_rownames=T,
-                          labels_row = gene_symbols,
-                          labels_col = rse_gene@colData$title,
-                          annotation_col=dplyr::select(dds_metadata, condition),
-                          scale="row",
-                          main= "Top 20 Over/Under Expressed Genes")
-
-
-# cannot use grid.arrange  - errors
+                         color=hmap_colors,
+                         show_rownames=T,
+                         labels_row = gene_ids,
+                         labels_col = rse_gene@colData$title,
+                         annotation_col=dds_metadata,
+                         scale="row",
+                         main= "Top 20 Over/Under Expressed Genes")
 show(heatmap_plot)
 
 ```
@@ -277,12 +239,11 @@ Overall, the most significant pathways had very close enrichment scores (within 
 
 ### Top 5 Pathways
 
-``` {r gsea,  fig.height=4, fig.width=8}
+``` {r gsea, fig.height=4, fig.width=12}
 library(msigdbr)
 library(clusterProfiler)
 
 TOP_PATHWAYS <- 5
-SIGNIFICANT_PATHWAYS_SAMPLE <- 100   # arbitrary choice
 
 # Get the gene sets and wrangle
 gene_sets <- msigdbr(species = "Homo sapiens", category = "C5")
@@ -294,8 +255,8 @@ dds_res_gsea <- dds_res_df %>%
   arrange(padj) %>%
   mutate(padj = case_when(padj == 0 ~ .Machine$double.xmin,
                           TRUE ~ padj)) %>%
-  mutate(gsea_metric = -log10(padj) * sign(log2FoldChange)) %>%
-  dplyr::filter(!is.na(gsea_metric)) %>%
+  mutate(gsea_metric = -log10(padj) * sign(log2FoldChange)) %>% # TODO - use stat (wald statistic) - but lfcShrink has removed this
+  dplyr::filter(!is.na(gsea_metric)) %>%   
   arrange(desc(gsea_metric))
 
 # Get the ranked GSEA vector
@@ -305,7 +266,7 @@ ranks <- dds_res_gsea %>%
   arrange(desc(gsea_metric)) %>%
   deframe()
 
-# Run GSEA
+# run GSEA
 res_gsea <- GSEA(geneList = ranks,
                 eps = 0,  # P-values are less than 1e-10. Set to zero for better estimation
                 TERM2GENE = gene_sets)
@@ -316,19 +277,18 @@ rownames(res_gsea_df) <- NULL
 res_gsea_df <- res_gsea_df %>%
             arrange(desc(NES))
 
-# pLot top 5 pathways
-top_5_pathways <- res_gsea_df %>%
-  slice_max(n = TOP_PATHWAYS, order_by=NES, with_ties=F) %>%
-  dplyr::select(ID, p.adjust, NES) %>%
-  arrange(desc(NES))
+# plot top and bottom 5 pathways
+top_bottom_pathways <- res_gsea_df %>%
+  filter(row_number() <= TOP_PATHWAYS | row_number() > n() - TOP_PATHWAYS) %>%
+  dplyr::select(ID, p.adjust, NES)
 
-g <- ggplot(top_5_pathways, aes(reorder(ID, NES), NES)) +
-  geom_col(aes(fill=p.adjust < P_THRESHOLD)) +
+g <- ggplot(top_bottom_pathways, aes(reorder(ID, NES), NES)) +
+  geom_col(aes(fill=NES < 0)) +
   coord_flip() +
   labs(x="Pathway",
        y="Normalized Enrichment Score",
        title=paste0("Top ",TOP_PATHWAYS, " Pathways")) +
-  theme_minimal()
+      theme_minimal()
 show(g)
 
 ```
@@ -336,33 +296,31 @@ show(g)
 ### Top 5 GSEA Plots
 The peak enrichment scores for the top 5 plots were very similar, although most of the pathways did not directly relate to the hypothesis being explored.
 
-``` {r gseaPlot, fig.height=5, fig.width=8, fig.align='center'}
+``` {r gseaPlot, fig.height=10, fig.width=12, fig.align='center'}
+library(ggpubr)
 
-# Make GSEA plot for "GO_CELL_MATRIX_ADHESION"
-gseaplot(res_gsea, geneSetID = "GOBP_POSITIVE_REGULATION_OF_CELL_ADHESION", title = "GOBP_POSITIVE_REGULATION_OF_CELL_ADHESION")
+top_5_pathways <- res_gsea_df %>%
+  slice_max(n = TOP_PATHWAYS, order_by=NES, with_ties=F) %>%
+  dplyr::select(ID, p.adjust, NES) %>%
+  arrange(desc(NES))
 
-gseaplot(res_gsea, geneSetID = "GOBP_WOUND_HEALING", title = "WOUND_HEALING")
+plot_list <- lapply(top_5_pathways$ID, function(p) return(gseaplot(res_gsea, geneSetID = p, title = p)))
 
-gseaplot(res_gsea, geneSetID = "GOMF_CYTOKINE_ACTIVITY", title = "GOMF_CYTOKINE_ACTIVITY")
-
-gseaplot(res_gsea, geneSetID = "GOMF_RECEPTOR_REGULATOR_ACTIVITY", title = "GOMF_RECEPTOR_REGULATOR_ACTIVITY")
-
-gseaplot(res_gsea, geneSetID = "GOCC_CELL_SURFACE", title = "GOCC_CELL_SURFACE")
+ggarrange(plotlist=plot_list, ncol=2, nrow=3)
 
 ```
 
 
 ### Significant Pathways
-The  top `r SIGNIFICANT_PATHWAYS_SAMPLE` pathways are shown in the table below. All have very close enrichment scores - from 1.88 for the first gene to 1.69 for the last pathway. So the 100 most significant pathways are too similarly expressed to make meaningful distinctions between them.
+The significant pathways are shown in the table below. All have very close enrichment scores - from 1.88 [TODO] for the first gene to 1.72 for the first 100 pathways. So the the most significant pathways are too similarly expressed to make meaningful distinctions between them.
 
 ``` {r gseaTable, fig.height=4, fig.width=7}
 
 # Significant Pathways in Table
 res_gsea_df %>%
   dplyr::filter(p.adjust < P_THRESHOLD) %>%
-  dplyr::select(ID, NES)  %>%
+  dplyr::select(ID, p.adjust, NES)  %>%
   arrange(desc(NES)) %>%
-  slice_max(n = SIGNIFICANT_PATHWAYS_SAMPLE, order_by=NES, with_ties=F) %>%
   DT::datatable()
 
 ```
@@ -407,8 +365,9 @@ print(duplicated_percentage)
 DESeq2 assumes a negative normal distribution, so the data was checked to assess where this was a valid assumption. The dispersion plot shows that variances exceed the means, satisfying the requirement for accepting the negative binomial distribution assumption.
 
 ```{r assessDist, fig.height=4, fig.width=6, fig.align='center'}
-mean_counts <- apply(dds_df[,1:ncol(dds_df)], 1, mean)
-variance_counts <- apply(dds_df[,1:ncol(dds_df)], 1, var)
+raw_counts <- counts(dds)
+mean_counts <- apply(raw_counts[,1:ncol(raw_counts)], 1, mean)
+variance_counts <- apply(raw_counts[,1:ncol(raw_counts)], 1, var)
 
 assess_df <- data.frame(mean_counts, variance_counts)
 
@@ -420,38 +379,6 @@ ggplot(assess_df) +
         ylab("Variance per Gene") +
         annotation_logticks()
 
-rm(assess_df, mean_counts, variance_counts)
-```
-
-
-## PCA Components {#PCA}
-
-The PCA analysis showed that the first 2 components contained the most useful explanatory information. The plots below show the principal components.
-``` {r pcaApp}
-print(pca_sum)
-
-# scree plot - home made  by me because its nicer
-scree_plot <- ggplot(varDF,aes(x=Component,y=varExp)) +
-       geom_col(fill="steelblue") +
-       theme_bw() + scale_x_continuous(breaks=seq(0, length(varExp), by = 1)) +
-       scale_y_continuous(breaks=seq(0, 100, by = 5)) +
-       ylab("% Variance") +
-       xlab("Principal Component")
-
-# cumulative variance plot
-cumul_prop <- pca_sum$importance[3,] * 100
-cumul_df <- data.frame(cumulativeProp = cumul_prop)
-cumul_plot <- ggplot(cumul_df, 
-                    aes(x=c(1:nrow(cumul_df)), y=cumulativeProp)) + 
-                    geom_point() +
-                    scale_y_continuous(breaks=seq(0, 100, by = 10)) +
-                    xlab("Principal Component") +
-                    ylab("% Cumulative Variance") +
-                    geom_hline(yintercept = 90, linetype = "dashed",color = "blue", size=0.4) +
-                    scale_x_continuous(breaks=c(1:nrow(cumul_df))) +
-                    expand_limits(y = 0)
-
-grid.arrange(scree_plot, cumul_plot, ncol=2, nrow=1)
 ```
 
 
