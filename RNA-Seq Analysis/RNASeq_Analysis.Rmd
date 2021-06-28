@@ -241,7 +241,7 @@ Some pathways were suggestive of tumor expression, such as GOBP_EPITHELIAL_CELL_
 
 Overall, the most significant pathways had very close enrichment scores (within 10% of each other, for the top 100 pathways), with many pathways not obviously related to the experiment. Therefore, no obvious trend was revealed from the GSEA analysis, and support for the hypothesis was weak.
 
-### Top 5 Pathways
+### Top 5 Over and Under-Expressed Pathways
 
 ``` {r gsea, fig.height=4, fig.width=12}
 library(msigdbr)
@@ -297,7 +297,8 @@ show(g)
 
 ```
 
-### Top 5 GSEA Plots
+### Top 5 GSEA Plots {.tabset}
+
 The peak enrichment scores for the top 5 plots were very similar, although most of the pathways did not directly relate to the hypothesis being explored.
 
 ``` {r gseaPlot, fig.height=10, fig.width=12, fig.align='center'}
@@ -308,15 +309,39 @@ top_5_pathways <- res_gsea_df %>%
   dplyr::select(ID, p.adjust, NES) %>%
   arrange(desc(NES))
 
-plot_list <- lapply(top_5_pathways$ID, function(p) return(gseaplot(res_gsea, geneSetID = p, title = p)))
-
-ggarrange(plotlist=plot_list, ncol=2, nrow=3)
-
+#plot_list <- lapply(top_5_pathways$ID, function(p) return(gseaplot(res_gsea, geneSetID = p, title = p)))
+#ggarrange(plotlist=plot_list, ncol=2, nrow=3)
 ```
 
 
+#### Plot 1
+``` {r gsea1}
+gseaplot(res_gsea, geneSetID = "GOBP_POSITIVE_REGULATION_OF_CELL_ADHESION", title = "GOBP_POSITIVE_REGULATION_OF_CELL_ADHESION")
+```
+
+
+#### Plot 2
+``` {r gsea2}
+gseaplot(res_gsea, geneSetID = "GOCC_CELL_SURFACE", title = "GOCC_CELL_SURFACE")
+```
+
+#### Plot 3
+``` {r gsea3}
+gseaplot(res_gsea, geneSetID = "GOBP_WOUND_HEALING", title = "GOBP_WOUND_HEALING")
+```
+
+#### Plot 4
+``` {r gsea4}
+gseaplot(res_gsea, geneSetID = "GOBP_WOUND_HEALING", title = "GOBP_WOUND_HEALING")
+```
+
+#### Plot 5
+``` {r gsea5}
+gseaplot(res_gsea, geneSetID = "GOBP_RESPONSE_TO_WOUNDING", title = "GOBP_RESPONSE_TO_WOUNDING")
+```
+
 ### Significant Pathways
-The significant pathways are shown in the table below. All have very close enrichment scores - from 1.88 [TODO] for the first gene to 1.72 for the first 100 pathways. So the the most significant pathways are too similarly expressed to make meaningful distinctions between them.
+The significant pathways are shown in the table below. All have very close enrichment scores - from 1.88 for the first gene to 1.68 for the first 100 pathways. So the the most significant pathways are too similarly expressed to make meaningful distinctions between them.
 
 ``` {r gseaTable, fig.height=4, fig.width=7}
 
@@ -333,7 +358,7 @@ res_gsea_df %>%
 
 The GSEA analysis showed several pathway expression relating to inflammation, immune and bacterial infection response, along with many other pathways with similar enrichment scores. Overall, there was very limited support for the hypothesis.
 
-There was expression of some pathways potentially related to oncogenesis, which could possibly be related to the cell line. There is previous evidence to suggest highly aberrant expression of some pathways in this cell line [^1]. Also, the cell line contains Human Papilloma Virus 18 DNA, known to cause the majority of cervical neoplasms and also implicated in the cell line's characteristic immortality. There is evidence of HPV-18 mRNA expression in HeLa cell lines [^2]. These are all confounding factors which warrant further investigation.
+There was expression of some pathways potentially related to oncogenesis, which could possibly be related to the cell line. There is previous evidence to suggest highly aberrant expression of some pathways in this cell line [^1]. Also, the cell line contains Human Papilloma Virus 18 DNA, known to cause the majority of cervical neoplasms and also implicated in the cell line's characteristic immortality. There is evidence of HPV-18 mRNA expression in HeLa cell lines[^2]. These are all confounding factors which warrant further investigation.
 
 The value of investigating individual gene expression with heatmaps or volcano plots for evaluating complex pathways appears limited, as gene expression and functional roles are heavily context dependent. The [GSEA analysis](#gsea) was found to be slightly more effective in discovering the cellular responses to intracellular bacterial infection.
 
