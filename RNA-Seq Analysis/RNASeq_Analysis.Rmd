@@ -113,14 +113,14 @@ The DESeq2 analysis was generated and a MA plot generated, which showed decreasi
 ``` {r generateDES, cache=TRUE}
 library(EnsDb.Hsapiens.v86)
 
-register(SnowParam(), default = TRUE)
+register(SnowParam(workers=2, progressbar=T))
 
-dds <- DESeq(dds, parallel = TRUE)
+dds <- DESeq(dds,  minReplicates=3, parallel = TRUE)
 dds_res <- results(dds, parallel = TRUE)
 # TODO: need to increase the 'shrinkage' here
-dds_res <- lfcShrink(dds=dds, res=dds_res, type="apeglm", coef = 2)
+dds_res <- lfcShrink(dds=dds, res=dds_res, type="apeglm", coef = 2, parallel = TRUE) 
 
-plotMA(dds_res)
+plotMA(dds_res, ylim=c(-10,10))
 
 dds_res_df<- data.frame(dds_res) %>%
   rownames_to_column(var="ensgene") %>%
@@ -137,15 +137,17 @@ dds_res_df <- dds_res_df %>%
                         by="GENEID") %>%
               mutate(symbol=SYMBOL) %>%
               dplyr::select(-SYMBOL)
+
 ```
 
 
 The table below shows all the significantly differentially expressed genes.
 
 ``` {r degTable}
+
 # Show all DEG in a table with non-NA padj and log2FC changes
 dds_res_df %>%
-  filter(!is.na(padj), !is.na(log2FoldChange)) %>%
+  dplyr::filter(!is.na(padj), !is.na(log2FoldChange)) %>%
   arrange(padj) %>%
   dplyr::select(symbol, log2FoldChange, padj) %>%
   DT::datatable()
@@ -198,7 +200,7 @@ hmap_colors <- c("#275591","#91BFDB","#E0F3F8","#FFFFBF","#FEE090","#FC8D59","#D
 
 # top 20 overexpressed
 gene_ids <- dds_res_df %>%
-            filter(!is.na(padj)) %>% 
+            dplyr::filter(!is.na(padj)) %>% 
             arrange(desc(log2FoldChange)) %>% 
             dplyr::filter(row_number()<= TOP_N | row_number() > n()- TOP_N) %>%
             dplyr::select(GENEID) %>%
