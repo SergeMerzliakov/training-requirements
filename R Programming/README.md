@@ -63,14 +63,12 @@ the 26,830 possible games.
 | /src | source code |
 | /tests | unit test code |
 | start.R | script to start main game loop |
-| run_tests.R | test harness to run all "testthat" unit test |
+| run_tests.R | test harness to run all "testthat" unit tests |
 
 
 ## Limitations and Outstanding Issues
 
 * Some control characters (Control-C) not handled on some of the inputs on Unix based operating systems, and will terminate the program prematurely.
-* Not fully tested in Windows operating systems.
-
 
 ## Software Version Details
 
