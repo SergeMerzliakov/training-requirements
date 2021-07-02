@@ -12,6 +12,25 @@ From the repository base directory run:
         Rscript start.R 
 
 
+### Game Controls
+
+Players enter moves with a single number from 1 to 9, indicating a square on the board.
+
+On each turn, the board position includes a "Movement Guide" showing the encoding of each move number to a board
+position. So in example below, the player has selected "4".
+
+
+     Game Board         Movement Guide (Select '1'...'9' for your move)
+     --- --- ---                   --- --- ---
+    |   |   |   |                 | 1 | 2 | 3 |
+     --- --- ---                   --- --- ---
+    | X |   |   |                 | 4 | 5 | 6 |
+     --- --- ---                   --- --- ---
+    |   |   |   |                 | 7 | 8 | 9 |
+     --- --- ---                   --- --- ---
+
+
+
 ## Running the Unit Tests
 
 This will execute all tests from the repository. From the repository base directory run:
