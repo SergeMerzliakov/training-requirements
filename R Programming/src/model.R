@@ -1,7 +1,7 @@
 # The game model state
 # No UI interactions here
 
-source("constant.r")
+source("constant.R")
 
 # Convert key character to player code of PLAYER_X or PLAYER_0
 # exists with error on invalid codeEnter your turn

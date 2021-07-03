@@ -1,6 +1,6 @@
 # input processing from User
 
-source("constant.r")
+source("constant.R")
 
 # message - character string message
 # allowed_keys  - case-insensitive vector of keys to be accepted, others will be rejected 

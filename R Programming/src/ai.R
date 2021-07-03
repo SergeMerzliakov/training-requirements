@@ -1,5 +1,5 @@
 # All AI logic for computers moves is here
-source("model.r")
+source("model.R")
 
 # computer AI move
 # computer_player <integer>
