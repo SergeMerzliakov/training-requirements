@@ -47,7 +47,7 @@ corner_strategy <- function(board) {
 
   # check if any corners available
   empty_corners <- board[c(1, 3, 7, 9)] == -1
-  if (table(empty_corners)["TRUE"] == 0)
+  if (is.na(table(empty_corners)["TRUE"]) || table(empty_corners)["TRUE"] == 0)
     return(result)
 
   corner_func <- function(row, col, board, corner_move) {
