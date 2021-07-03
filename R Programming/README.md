@@ -33,6 +33,8 @@ position. So in example below, the player has selected "4".
 
 ## Running the Unit Tests
 
+(Install testthat package first)
+
 This will execute all tests from the repository. From the repository base directory run:
 
         Rscript run_tests.R 
