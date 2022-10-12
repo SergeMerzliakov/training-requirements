@@ -1,51 +1,86 @@
-# R programming
+# Tic Tac Toe
 
-This training is intended to help you gain and demonstrate fundamental skills in `R` programming. `R` is an open-source language originally designed for statistical computing and it is an excellent language for data science and bioinformatics.
-
-## Background and Getting Help
-
-To get the skills in R programming needed to complete this, check out:
-
-The BIG workshop on R programming ([link](https://www.bigbioinformatics.org/r-for-biologists)), DataCamp's introductory R course ([link](https://learn.datacamp.com/courses/free-introduction-to-r)), and intermediate R course ([link](https://learn.datacamp.com/courses/intermediate-r)).
-
-You can always visit Henry's office hours ([link](https://calendly.com/millerh1/30min)) and ask for help in the slack group. Don't worry if this takes a while, it's designed to be a challenge. 
-
-## Miniproject: Tic-Tac-Toe
-
-You and your friends love to play the classic game "Tic-Tac-Toe", but you can't play together anymore because of the pandemic! 
-
-Write an R script that will allow you to play a game of Tic-Tac-Toe against your computer using the command line. When you're done, send your script to Henry to test!
-
-Create a script that lets you play a full game of tic-tac-toe, given that:
-1. The script has to be executable using `Rscript <your_script.R>` (e.g., `Rscript tic-tac-toe.R`).
-2. All the rules of tic-tac-toe are included. `X` always goes first, then `O`. The first to get three-in-a-row wins. A stalemate when no moves remain is a tie.
-3. The script should ask the player to choose moves using a prompt (see example).
-4. The player should play tic-tac-toe against the computer (not another human player)
-5. The player can choose "X" or "O"
-6. The code follows R style best practices. Use the [styler](https://www.tidyverse.org/blog/2017/12/styler-1.0.0/) to help with that.
-7. There should be no errors. No matter what the user inputs, they shouldn't see any errors. 
-
-**Hint**: To get user input on the command line, use the following construct:
-
-```R
-if (interactive()) {
-  con <- stdin()
-} else {
-  con <- "stdin"
-}
-cat("X or O? ")
-symbol <- readLines(con = con, n = 1)
-```
-
-This is necessary to ensure that the script works regardless of whether you run it in RStudio or using `Rscript` on the command line. 
-
-**Hint 2**: To avoid the user getting an error, make sure that their inputs are validated. For example, if I ask the user `X or O?` they shouldn't be allowed to answer `B`. In my version of the game (below), if the user enters an invalid response, I send a warning message and prompt them again -- but you can choose your own way of handling these issues.
-
-**Bonus**: There's no requirement to make it aesthetically nice, but you get bonus points! If you want to, you can use `cat()` to make formatted messages to the player. You can also use `Sys.sleep()` to add pauses that allow the user time to read the screen. 
-
-Here's an example:
-
-![tic-tac-toe](https://user-images.githubusercontent.com/44813811/111565769-f6640d00-8769-11eb-9f06-5076c18b3ab0.gif)
+This is a basic Tic-Tac-Toe game written in R. It can be run from inside R studio or from the command
+line.
 
 
 
+## Running The Game
+
+From the repository base directory run:
+
+        Rscript start.R 
+
+
+### Game Controls
+
+Players enter moves with a single number from 1 to 9, indicating a square on the board.
+
+On each turn, the board position includes a "Movement Guide" showing the encoding of each move number to a board
+position. So in example below, the player has selected "4".
+
+
+     Game Board         Movement Guide (Select '1'...'9' for your move)
+     --- --- ---                   --- --- ---
+    |   |   |   |                 | 1 | 2 | 3 |
+     --- --- ---                   --- --- ---
+    | X |   |   |                 | 4 | 5 | 6 |
+     --- --- ---                   --- --- ---
+    |   |   |   |                 | 7 | 8 | 9 |
+     --- --- ---                   --- --- ---
+
+
+
+## Running the Unit Tests
+
+* Install "testthat" package
+* Run the run_tests.R script
+
+The command below will execute all tests from the repository. From the repository base directory run:
+
+        Rscript run_tests.R 
+
+
+And provide output similar to:
+
+✔ |  OK F W S | Context
+✔ |  20       | ai [0.2 s]                                                                               
+✔ |  32       | model [0.1 s]                                                                            
+⠋ |   1       | regression                                                                               [1] "Simulated 2000 games successfully"
+✔ |   1       | regression [1.5 s]
+
+══ Results ════════════════
+Duration: 1.8 s
+
+[ FAIL 0 | WARN 0 | SKIP 0 | PASS 53 ]
+
+The number of unit tests is not exhaustive, and provides guidance for a more complete set of unit
+tests to be written.
+
+**Note**: There are no automated functional tests to automate the testing of all 765 different positions, or
+the 26,830 possible games.
+
+## Project File Structure
+
+
+| Directory/File | Details |
+|----------|-------------------------------|
+| /src | source code |
+| /tests | unit test code |
+| start.R | script to start main game loop |
+| run_tests.R | test harness to run all "testthat" unit tests |
+
+
+## Limitations and Outstanding Issues
+
+* Some control characters (Control-C) not handled on some of the inputs on Unix based operating systems, and will terminate the program prematurely.
+
+## Software Version Details
+
+    R version 4.1.0 (2021-05-18)
+ 
+    attached base packages:
+    [1] stats     graphics  grDevices utils     datasets  methods   base
+    
+    other attached packages:
+    [1] testthat_3.0.3
