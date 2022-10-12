@@ -1,0 +1,327 @@
+---
+title: "R for Data Science"
+author: "Serge Merzliakov"
+date: "28/05/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(tidyverse)
+library(scales)
+library(plotly)
+library(gridExtra)
+library(grid)
+library(knitr)
+
+options(scipen=999999)
+
+setwd("~/dev/training-requirements/R for Data Science/src/")
+
+gapminder <- as_tibble(read_csv("../gapminder_clean.csv"))
+names(gapminder)[2]<-"country"
+names(gapminder)[5]<-"CO2emissions"
+names(gapminder)[8]<-"energyUse"
+names(gapminder)[12]<-"imports"
+names(gapminder)[15]<-"lifeExp"
+names(gapminder)[16]<-"popDensity"
+```
+## Overview
+This report details an analysis of the GapMinder data, containing various economic statistics for countries across the world, from 1962 to 2007.
+
+### GapMinder Data Set Analysis
+
+#### Scatter Plot - Emissions By GDP Per Capita (1962)
+After applying a logarithmic transform to both axes, a linear relationship is suggested on visual inspection.
+
+```{r a, echo=FALSE, fig.align="center",warning=FALSE, message=FALSE,out.width="60%",out.height="60%" }
+gapminder1962 <- gapminder %>%
+  filter(Year==1962) %>%
+  mutate(across(is.numeric, ~ round(., 2)))
+
+scatter62log <- ggplot(gapminder1962, aes(x=gdpPercap,y=CO2emissions, size=pop)) +
+  geom_point() + 
+  scale_x_log10(labels = comma) + 
+  scale_y_log10() + 
+  stat_smooth(method=lm, se=F) + 
+  ggtitle("CO2 Emissions By GDP/Capita - 1962") + 
+  labs(y = "Log CO2 Emissions (tons/Capita)") + 
+  labs(x = "Log GDP/Capita (International Dollars)")
+
+ggplotly(scatter62log)
+```
+
+#### Correlation Between 1962 Emissions and GDP Per Capita
+After a log transformation of both variables, a strong positive correlation was found, with a value 0.86. This strongly suggests that wealthier nations emit more carbon dioxide.
+```{r b, echo=FALSE, fig.align='center',warning=FALSE, message=FALSE}
+cor.test(log(gapminder1962$CO2emissions), log(gapminder1962$gdpPercap))
+```
+
+#### Strongest Correlation Between Emissions and GDP Per Capita
+The strongest correlation between Emissions and GDP Per Capita was in 2002, with a value of 0.93. The table below shows that the
+correlation was also strongly positive across all the years for which data was available.
+```{r c, echo=FALSE, fig.align='center',warning=FALSE, message=FALSE}
+gapminder_emissions_corr <- gapminder %>%
+  group_by(Year) %>%
+  summarize(pearson_correlation = cor(log(CO2emissions), log(gdpPercap),use="pairwise.complete.obs")) %>%
+  arrange(desc(pearson_correlation))
+
+kable(gapminder_emissions_corr, digits = c(0, 3), col.names=c("Year", "Correlation - Emissions to GDP"), caption="Ranked Correlations By Year", align = "lc", format = "html", table.attr = "style='width:45%;margin-left:20%'")
+```
+
+#### Scatter Plot - Emissions By GDP Per Capita (2002)
+For 2002, the scatter plot demonstrates the strong positive correlation.
+
+```{r d, echo=FALSE, fig.align='center',warning=FALSE, message=FALSE}
+gapminder2002 <- gapminder %>%
+  filter(Year == 2002) %>%
+  mutate(across(is.numeric, ~ round(., 2)))
+
+ plot2002 <- ggplot(gapminder2002, aes(x=gdpPercap,y=CO2emissions, size=pop, color=continent)) + 
+  geom_point() + 
+  scale_x_log10(labels = comma) + 
+  scale_y_log10() + 
+  ggtitle("CO2 Emissions By GDP/Capita - 2002") + 
+  labs(y = "Log CO2 Emissions (Tons/Capita)") + 
+  labs(x = "Log GDP/Capita (International Dollars)")
+ 
+ggplotly(plot2002)
+```
+
+### Question 1 - Relationship Between Continents and Energy Use 
+There was a distinct difference in energy use between continents, as there was a strong link between GDP Per Capita and energy usage (Graph 1). Continents with a lot of developed nations such as Europe and Oceania consistently had higher energy usage through the period 1962-2007. Energy usage also increased for most continents over time.
+
+In the graph below, energy user per continent over time shows various trends. One such trend is the difference between the continents with predominantly developed nations (Oceania and Europe), and those consisting of predominantly those of developing countries (Africa). The large drop from 1962 to 1972 for Americas and Asia is due to missing data for developing countries, only rectified in the 1972 data. This leads to the question of suprisingly low median values for Asia and Americas, which includes Japan, Canada and the United States. As these developed economies have much higher energy usages, they are effectively outliers when grouped with their geographical neighbors. So GDP is the hidden factor here, reducing the value of continents as a discriminatory variable.
+
+```{r q1a, echo=FALSE, fig.align='center', warning=FALSE, message=FALSE}
+energyByContinent <- gapminder %>%
+  group_by(Year, continent) %>%
+  summarize(medianEnergyUse = median(energyUse, na.rm=T)) %>%
+  mutate(across(is.numeric, ~ round(., 0))) 
+
+energyByContinent <- drop_na(energyByContinent)
+
+gap2007 <- gapminder %>%
+  filter(Year==2007) %>%
+  mutate(across(is.numeric, ~ round(., 0))) 
+gap2007 <- drop_na(gap2007)
+
+ebc <- ggplot(energyByContinent, aes(x=Year,y=medianEnergyUse, color=continent)) +
+  geom_line() +
+  labs(y = "Median Energy Use (oil kg/capita)") +
+  labs(x = "Year") +
+  scale_x_continuous(breaks=seq(1962, 2007, by = 5)) + 
+  ggtitle("Graph 1. Energy Use By Continent")
+
+ggplotly(ebc)
+```
+
+To further understand the impacts of GDP on energy use, a sample from a single year (2007) was analyzed. Unremarkably, the relationship between energy use and GDP was positive, and also linear, as demonstrated by the regression line in the graph below. This explains many of the features of energy use by continent shown in Graph 1.
+
+```{r q1b, echo=FALSE, fig.align='center',warning=FALSE, message=FALSE}
+g <- ggplot(gap2007, aes(x=gdpPercap,y=energyUse)) +
+        geom_point() +
+        stat_smooth(method=lm, se = FALSE) +
+        labs(y = "Median Energy Use (oil kg/capita)") +
+        labs(x = "GDP Per Capita") +
+        ggtitle("Graph 2. Energy Use By GDP per Capita (2007)")
+
+ggplotly(g)
+```
+
+
+### Question 2 - Difference between Europe and Asia Imports after 1990 
+Imports were compared between European and Asian imports were compared from 1992 to 2007. There are four sets of data, spaced 5 years apart. Whilst 
+there is some variation in exports from year to year, the differences where not significant.
+
+More details on the analysis process are detailed in Appendix 2.
+
+``` {r q2, fig.align='center', echo=FALSE, warning=FALSE, message=FALSE, out.height="60%"}
+eurasia <- gapminder %>%
+  filter(Year>1990, continent %in% c("Europe","Asia"))  %>%
+  mutate(across(is.numeric, ~ round(., 0)))
+
+eurasiaSummary <- eurasia %>%
+  group_by(Year, continent) %>%
+  summarize(medianImports = median(imports, na.rm=T))  %>%
+  mutate(across(is.numeric, ~ round(., 0)))
+  
+# review basic data for obvious trends
+euplot2 <- ggplot(eurasiaSummary , aes(x=continent, y=medianImports, fill=continent)) +
+  geom_col() +
+  facet_wrap(~Year) +
+  labs(x = "Continent") +
+  labs(y = "Imports (% of GDP)") +
+  ggtitle("Graph 3. Imports By Continent and Year")
+
+ggplotly(euplot2)
+
+euplot1 <- ggplot(eurasia, aes(x=continent,y=imports)) +
+  geom_boxplot() +
+  facet_wrap(~Year) +
+  labs(x = "Continent") +
+  labs(y = "Imports (% of GDP)") +
+  ggtitle("Graph 4. Review of Distributions of Imports By Continent and Year") 
+
+ggplotly(euplot1)
+```
+
+### Question 3
+The country with the highest mean ranking for population density between 1962 and 2007 is the Macao Special Administrative Region (SAR), followed by Monaco and Hong Kong SAR.
+
+The top 5 nations are detailed in the table below.
+``` {r q3, echo=FALSE, warning=FALSE, message=FALSE}
+gapDensity <- gapminder %>%
+  filter(!is.na(country), is.finite(popDensity)) %>%
+  select(country, Year, popDensity) %>%
+  spread(Year, popDensity)
+
+rankedMeanDensity <-  gapDensity %>%
+  mutate(meanDensity = rowMeans(gapDensity[,-1])) %>%
+  arrange(desc(meanDensity)) %>%
+  mutate(across(is.numeric, ~ round(., 0)))
+
+kable(rankedMeanDensity[1:5,c(1,12)], col.names=c("Country", "Average Population Density"), caption="Top 5 Nations By Population Density (1962-2007)", align = "lc", format = "html", table.attr = "style='width:55%;margin-left:15%'")
+```
+
+
+### Question 4
+The greatest absolute increase in life expectancy occurred in the Maldives, with a 37 year increase between 1962 and 2007. As a percentage, however, Bhutan's life expectancy increased 100%, from 33 to 66 years.
+
+The tables below show the top 5 life expectancy increases.
+``` {r q4, echo=FALSE, warning=FALSE, message=FALSE}
+lifeExpCore <- gapminder %>%
+            select(Year, country, lifeExp ) %>%
+            spread(Year, lifeExp)
+
+lifeExpAbsolute <- lifeExpCore %>%
+    mutate(lifeExpIncrease = `2007` - `1962`) %>%
+    mutate(across(is.numeric, ~ round(., 1))) %>%
+    arrange(desc(lifeExpIncrease))
+
+lifeExpPercent <- lifeExpCore %>%
+    mutate(lifeExpIncreasePercent = (`2007` - `1962`)/`1962` * 100) %>%
+    mutate(across(is.numeric, ~ round(., 1))) %>%
+    arrange(desc(lifeExpIncreasePercent))
+
+# Q4 What country (or countries) has shown the greatest increase in 'Life expectancy at birth, total (years)' since 1962?
+kable(lifeExpAbsolute[1:5,c(1,2,11,12)], col.names=c("Country", "1962", "2007", "Life Expectancy Increase in Years"), caption="Absolute Increase in Life Expectancy", align = "lccc")
+
+kable(lifeExpPercent[1:5,c(1,2,11, 12)], col.names=c("Country", "1962", "2007", "Life Expectancy % Increase"), caption="Increase in Life Expectancy By Percentage", align = "lccc")
+```
+
+
+### Appendix 1 - Question 1 Analysis
+
+##### Issue 1: Missing Data in Oldest Records
+From 1962 to 1967, both Americas and the Asian continents data only included developed nations such as USA, Canada and Japan, leading to very high median energy usages. From 1972, less developed nations energy usage data was added, leading to large drops in median energy usage for Asia and the Americas.
+
+##### Issue 2: High variability of data by continent
+A review of the energy use by continent revealed that several continents contained developed nations from the [G12](https://en.wikipedia.org/wiki/Group_of_Twelve), all of which have much higher energy usage than developing nations. These nations represented outliers, making the median a better measure for all summary statistics.
+
+The graphs below demonstrate the issue of developed and developing countries in Asia and the Americas for a single year.
+
+
+```{r Q1issue2, echo=FALSE, warning=FALSE, message=FALSE,  out.height="60%"}
+america2007 <- gapminder %>%
+  filter(Year==2007, continent=="Americas")
+
+asia2007 <- gapminder %>%
+  filter(Year==2007, continent=="Asia")
+
+americas_outlier_x <-IQR(america2007$energyUse, na.rm=TRUE) * 1.5 + quantile(america2007$energyUse, na.rm=TRUE)[4]
+am <- ggplot(america2007, aes(x= energyUse,y=country, size=gdpPercap, color=gdpPercap)) +
+  geom_point() +
+  ggtitle("Energy Use in the Americas (2007)") +
+  labs(x = "Energy Use (Oil kg/Capita)") +
+  labs(y = "Country") +
+  scale_x_continuous(breaks=seq(0, 20000, by = 2000)) +
+  geom_vline(xintercept = americas_outlier_x, linetype = "dashed",color = "blue", size=0.4) +
+  annotate(x=americas_outlier_x,y=+Inf,label="Outlier Boundary",vjust=2,geom="label")
+am
+
+asia_outlier_x <- IQR(asia2007$energyUse, na.rm=TRUE) * 1.5 + quantile(america2007$energyUse, na.rm=TRUE)[4]
+as <- ggplot(asia2007, aes(x=energyUse,y=country, size=gdpPercap, color=gdpPercap)) +
+  geom_point() +
+  ggtitle("Energy Use in Asia (2007)") +
+  labs(x = "Energy Use (Oil kg/Capita)") +
+  labs(y = "Country") +
+  scale_x_continuous(breaks=seq(0, 12000, by = 1000)) +
+  geom_vline(xintercept =asia_outlier_x , linetype = "dashed",color = "blue", size=0.4) +
+  annotate(x=asia_outlier_x,y=+Inf,label="Outlier Boundary",vjust=2,geom="label")
+as
+
+```
+
+### Appendix 2 - Question 2 Analysis
+
+The data was split by year into imports from Asia and Europe. For each year, tests of variance and normality were carried out.
+the data sets for each year where found to be of non-normal distribution and heteroscedastic.
+
+Attempts at data transformation did not have an effect on distribution.
+
+For these reasons, the non-parametric Wilcoxon Rank Sum Test was used to assess if there was a significant difference in imports
+between European and Asian continents.
+
+##### Variance Test
+ The following code was used on a subset of the the data (eurasia), which only contained data from Europe and Asia, test variance across all years. Both Asian and European data sets across all years were found to heteroscedastic.
+ 
+```{r Q2vartest, echo=TRUE, warning=FALSE, message=FALSE}
+for(Y in seq(from=1992, to=2007, by=5)){
+  asia <- eurasia %>% filter(continent=="Asia", Year==Y) %>% select(imports)
+  europe <- eurasia %>% filter(continent=="Europe", Year==Y)  %>% select(imports)
+  bt <- var.test(asia$imports, europe$imports)
+  if (bt$p.value < 0.05){
+    print(paste("Year ", Y, " - Samples Have Different Variance p=",bt$p.value))
+  }else{
+    print(paste("Year ", Y, " - Samples Have Same Variance p=", bt$p.value))
+  }
+}
+
+```
+
+##### Population Distribution Test
+After the comparison of variances, the samples were assessed to see if they had a normal distribution.The following code was used on a subset of the data (eurasia), which only contained data from Europe and Asia. The data was found to have distributions which were NOT normal.
+
+``` {r Q2disttest, echo=TRUE, warning=FALSE, message=FALSE}
+for(Y in seq(from=1992, to=2007, by=5)){
+  asia <- eurasia %>% filter(continent=="Asia", Year==Y) %>% select(imports)
+  europe <- eurasia %>% filter(continent=="Europe", Year==Y)  %>% select(imports)
+  shap_asia <- shapiro.test(asia$imports)
+  shap_europe <- shapiro.test(europe$imports)
+
+  if (shap_asia$p.value < 0.05){
+    print(paste("Year ", Y, " - Asia Sample is not Normal Dist p=", shap_asia$p.value))
+  }else{
+    print(paste("Year ", Y, " - Assia sample has Normal Dist p=", shap_asia$p.value))
+  }
+
+  if (shap_europe$p.value < 0.05){
+    print(paste("Year ", Y, " - Europe sample is Not Normal Dist p=", shap_europe$p.value))
+  }else{
+    print(paste("Year ", Y, " - Europe sample has Normal Dist p=", shap_europe$p.value))
+  }
+}
+```
+
+##### Sample Test
+Since the data is heteroscedastic, with a non-Normal distribution, the Wilcoxon Rank Sum test was used to confirm or exclude any 
+significant difference in exports for each year of data collected. 
+
+The following code was used on a subset of the data (eurasia), which only contained data from Europe and Asia.
+
+The result for all years was that there was NO significant difference in exports between Asia and Europe.
+
+``` {r Q2wilctest, echo=TRUE, warning=FALSE, message=FALSE}
+for(Y in seq(from=1992, to=2007, by=5)) {
+  asia <- eurasia %>% filter(continent=="Asia", Year==Y) %>% select(imports)
+  europe <- eurasia %>% filter(continent=="Europe", Year==Y)  %>% select(imports)
+  wt <- wilcox.test(asia$imports, europe$imports)
+  print(paste("Year ", Y, " - Wilcoxon Rank Sum. p=",wt$p.value))
+}
+```  
+
