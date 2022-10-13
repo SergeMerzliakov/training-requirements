@@ -1,0 +1,484 @@
+---
+title: "RNA-Seq Analysis v3.0"
+author: "Serge Merzliakov"
+date: "12/08/2021"
+output:
+  html_document:
+    toc: TRUE
+    number_sections: TRUE
+    toc_float:
+      collapsed : FALSE
+    toc_depth: 3
+theme: readable
+---
+
+```{r setup, include=FALSE}
+
+options(width = 110)
+
+library(DESeq2)
+library(ggplot2)
+library(ggrepel)
+library(plotly)
+library(gridExtra)
+library(BiocParallel)
+library(dplyr)
+library(tibble)
+library(data.table)
+library(stringr)
+library(DT)
+library(here)
+
+P_THRESHOLD <- 0.05
+DATA_DIR <- "data"
+RNA_SEQ_FILE <- "data/rse_gene.Rdata"
+URL_TO_FILE <- "http://duffel.rail.bio/recount/v2/SRP034009/rse_gene.Rdata"
+
+options(scipen=99999)
+
+# create data directory if not already present
+dir.create(file.path(getwd(), DATA_DIR), showWarnings = FALSE)
+
+# load data or fetch if run for the first time
+if (! file.exists(RNA_SEQ_FILE)) {
+	download.file(URL_TO_FILE, destfile=RNA_SEQ_FILE)
+}
+
+load(RNA_SEQ_FILE)
+
+rse_gene@colData$condition <- as.factor(c("Control","Control","Control","Salmonella","Salmonella","Salmonella"))
+dds <- DESeqDataSet(rse_gene, design = ~ condition)
+
+
+# Need to remove genes with very high counts in a single replicate - the heat map highlighted this issue, and hence
+# this step was retained. See Appendix Section "Removal of Technical Errors"
+keep <- rowSums(counts(dds) > 10) >= 2 # keep genes with at least 2 samples with a count of 10 or higher
+dds <- dds[keep,]
+rm(keep)
+
+knitr::opts_chunk$set(echo=FALSE, message=FALSE, warning=FALSE)
+```
+
+# INTRODUCTION
+Intracellular infections of epithelial cells are hypothesized to produce expression of gene pathways related to immune response, infection response, and inflammation. To test this hypothesis, Salmonella Typhimurium and the Hela-229 cell line were chosen. Salmonella are intracellular bacteria, which infect and replicate within both epithelial cells and macrophages, causing acute gastroenteritis in humans. The HeLa-229 human cell line is epithelial in origin, so will constitute an acceptable host for Salmonella.
+
+This experiment will test this hypothesis using a DESeq2 analysis, with a two-group experimental design.
+
+# RESULTS
+
+## Overview
+An DESeq2 analysis was conducted on data comparing gene expression in HeLa-229 cells infected with Salmonella Typhimurium with a control group. The analysis was performed with the DESeq2 tool, using the R package of the same name.
+
+### Data Set
+
+| | |
+|-----------------:|:------------------------------------------------------------------------------|
+|Title:| Transcriptomic profiling of HeLa-229 cells infected with Salmonella Typhimurium |
+|Accession Number:| SRP034009  [https://trace.ncbi.nlm.nih.gov/Traces/study/?acc=SRP034009] |
+|BioProject:| PRJNA231559  [https://www.ncbi.nlm.nih.gov/bioproject/PRJNA231559] |
+|File URL | [http://duffel.rail.bio/recount/v2/SRP034009/rse_gene.Rdata] |
+
+
+### Experimental Design
+The data set was a two-group experimental design with three replicates in each group. One group was the Salmonella infected cells, the second, the control group.
+
+### Analysis Process
+The DESeq2 R package was used to perform the Differential Gene Expression Analysis (DGE) and the clusterProfiler R package for the Gene Set Enrichment Analysis (GSEA).
+
+* An [initial analysis](#Initial) reviewed the counts, and their distribution to confirm quality and statistical criteria were satisfied.
+* A [Principle Component Analysis](#PCA) was performed for quality assessment and exploratory analysis.
+* A [Volcano Plot](#volcano) was generated, highlighting significant expression of genes.
+* A [HeatMap](#heatmap) was generated for the most over and under expressed genes.
+* A [Gene Set Enrichment Analysis](#gsea) was performed to determine to most significantly expressed pathways.
+
+## Principal Component Analysis {#PCA}
+``` {r pcaData }
+
+# normalize counts
+dds <- estimateSizeFactors(dds)
+
+# log transformation for large data sets
+dds_vst <- vst(dds)
+
+```
+A Principal Component Analysis (PCA) was performed on the data which showed that first 2 components explained 95.4% of the variance.
+
+The component plots show strong differentiation on the PC1 axis for the control and condition groups, with tight clustering for the control replicates, and Salmonella replicates split into two clusters, with Salmonella Replicate 1 differing from the other 2 Salmonella replicates. The heatmap shows a different pattern of of expression for Salmonella replicate and this is explorer further in [section](#heatmap).
+
+
+``` {r pcaPlotImp, fig.height=4, fig.width=10}
+
+plotPCA(dds_vst)
+
+```
+
+## DESeq2 Analysis {#analysis}
+
+The DESeq2 analysis was generated and a MA plot generated, which showed decreasing variability with increased counts, and an approximately equal proportion of over and under expressed genes.
+
+``` {r generateDES, cache=TRUE}
+library(EnsDb.Hsapiens.v86)
+
+register(SnowParam(workers=2))
+
+# remove outliers with  minReplicatesForReplace
+dds <- DESeq(dds, minReplicatesForReplace = 3, parallel = TRUE)
+dds_res <- results(dds, parallel = TRUE)
+dds_res_lfc <- lfcShrink(dds=dds, type="apeglm", coef = 2, parallel = TRUE) 
+
+plotMA(dds_res_lfc, ylim=c(-10,10))
+
+dds_res_df <- data.frame(dds_res) %>%
+              rownames_to_column(var="ensgene") %>%
+              mutate(GENEID=sub('\\..+', "", ensgene))  %>% # strip off ensemble Id version
+              dplyr::select(-ensgene)
+
+ens2sym <- AnnotationDbi::select(EnsDb.Hsapiens.v86, 
+                                 keys = keys(EnsDb.Hsapiens.v86),
+                                 columns = c("SYMBOL"))
+
+dds_res_df <- dds_res_df %>%
+              left_join(x=dds_res_df, y=ens2sym, by="GENEID") %>%
+              mutate(symbol=SYMBOL) %>%
+              dplyr::select(-SYMBOL) %>%
+              arrange(padj) 
+
+```
+
+
+The table below shows all the significantly differentially expressed genes.
+
+``` {r degTable}
+
+# Show all DEG in a table with non-NA padj and log2FC changes
+dds_res_df %>%
+  dplyr::filter(!is.na(padj), !is.na(log2FoldChange)) %>%
+  arrange(padj) %>%
+  dplyr::select(symbol, log2FoldChange, padj) %>%
+  DT::datatable()
+
+```
+
+## Volcano Plot {#volcano}
+The top most significantly expressed genes included CCL2, IL6, CXCL2, CTSL and all of these are involved in inflammation or immune response pathways. Since they are differentially expressed, the presence of Salmonella is a possible cause. The underlying presence of HPV-18 in the cell line may also explain some of this expression[^2], but this cannot be determined with the experiment design.
+
+Overall the plot shows conclusively that significant over and under expression occurred, with somewhat more over-expression than under-expression.
+
+``` {r volcano, fig.height=8, fig.width=10, fig.align='center'}
+library(EnhancedVolcano)
+
+GENES_TO_LABEL <- 20  #an arbitrary choice
+
+volcano_plot <-EnhancedVolcano(dds_res_df,
+                           lab=dds_res_df$symbol,
+                           selectLab = dds_res_df$symbol[1:GENES_TO_LABEL],
+                           x = 'log2FoldChange',
+                           y = 'pvalue',
+                           xlim = c(-15, 20),
+                           title = 'Salmonella Infected Cell DGE',
+                           pCutoff = 1E-100,
+                           pointSize = 2.0,
+                           labSize = 4.0)
+
+# cannot use  ggplotly - error - Error in unique.default(x)
+# cannot use grid.arrange  - errors
+show(volcano_plot)
+```
+
+
+## HeatMap {#heatmap}
+Evaluating the top genes together as a group using Enrichr [^5] demonstrated that they are correlated with pathways such as Endogenous Toll-Like Receptor signalling, involved in infection responses and IL-17 Signalling, involved in inflammation responses. These pathways were detected in the GSEA analysis as well.
+
+``` {r heatmapPost, fig.height=8, fig.width=8, fig.align='center'}
+library(pheatmap)
+
+TOP_N <- 20
+
+norm_counts <- data.frame(counts(dds, normalized=T))
+
+# based on brewer.pal(n = 7, name = "RdYlBu")
+hmap_colors <- c("#275591","#91BFDB","#E0F3F8","#FFFFBF","#FEE090","#FC8D59","#D73027")
+
+# top 20 overexpressed/underexpressed
+top_20 <- dds_res_df %>%
+          slice_max(order_by=stat, n=TOP_N, with_ties = FALSE) %>%
+          bind_rows(dds_res_df %>% slice_min(order_by=stat, n=TOP_N, with_ties = FALSE))
+
+sig_norm_counts <- norm_counts[top_20$GENEID,]
+
+dds_metadata <- data.frame(condition=rse_gene@colData$condition, row.names = colnames(sig_norm_counts))
+
+heatmap_plot <- pheatmap(sig_norm_counts,
+                         color=hmap_colors,
+                         show_rownames=T,
+                         labels_row = top_20$symbol,
+                         labels_col = rse_gene@colData$title,
+                         annotation_col=dds_metadata,
+                         scale="row",
+                         main= "Top 20 Over/Under Expressed Genes")
+show(heatmap_plot)
+
+```
+
+
+## Gene Set Enrichment Analysis {#gsea}
+A Gene Set Enrichment Analysis (GSEA) was performed, in which some pathways [^4] were related to infection and immunologic specific pathways, specifically:
+
+* GOBP_NEGATIVE_REGULATION_OF_WOUND_HEALING
+* GOBP_REGULATION_OF_WOUND_HEALING
+* GOBP_REGULATION_OF_RESPONSE_TO_WOUNDING
+* GOBP_WOUND_HEALING
+
+Some pathways were suggestive of tumor expression, such as GOBP_EPITHELIAL_CELL_PROLIFERATION. The presence of these may be confounding factors related to the HeLa cell line or HPV-18.
+
+Overall, the most significant pathways had very close enrichment scores (within 15% of each other, for the top 100 pathways), with many pathways not obviously related to the experiment. Therefore, no obvious trend was revealed from the GSEA analysis, and support for the hypothesis was weak.
+
+### Top 5 Over and Under-Expressed Pathways
+
+``` {r gsea, fig.height=4, fig.width=12}
+library(msigdbr)
+library(clusterProfiler)
+
+TOP_PATHWAYS <- 5
+
+# Get the gene sets and wrangle
+gene_sets <- msigdbr(species = "Homo sapiens", category = "C5")
+gene_sets <- gene_sets %>%
+  dplyr::select(gs_name, gene_symbol)
+
+# org.Hs.eg.db VERSION
+dds_res_gsea <- dds_res_df %>%
+  arrange(padj) %>%
+  mutate(padj = case_when(padj == 0 ~ .Machine$double.xmin,
+                          TRUE ~ padj)) %>%
+  mutate(gsea_metric = stat) %>%
+  dplyr::filter(!is.na(gsea_metric)) %>%   
+  arrange(desc(gsea_metric))
+
+# Get the ranked GSEA vector
+ranks <- dds_res_gsea %>%
+  dplyr::select(symbol, gsea_metric) %>%
+  dplyr::distinct(symbol, .keep_all = TRUE) %>%
+  arrange(desc(gsea_metric)) %>%
+  deframe()
+
+# run GSEA
+res_gsea <- GSEA(geneList = ranks,
+                eps = 0,  # P-values are less than 1e-10. Set to zero for better estimation
+                TERM2GENE = gene_sets)
+
+
+# Henry's shorter version
+# res_gsea <- ds_res_df %>% 
+#             select(symbol, stat) %>% 
+#             distinct(symbol, .keep_all=TRUE) %>% 
+#             arrange(desc(stat)) %>% deframe() %>% 
+#             GSEA(TERM2GENE=gene_sets, eps=0)
+
+res_gsea_df <- as.data.frame(res_gsea)
+rownames(res_gsea_df) <- NULL
+
+res_gsea_df <- res_gsea_df %>%
+            arrange(desc(NES))
+
+# plot top and bottom 5 pathways
+top_bottom_pathways <- res_gsea_df %>%
+  filter(row_number() <= TOP_PATHWAYS | row_number() > n() - TOP_PATHWAYS) %>%
+  dplyr::select(ID, p.adjust, NES)
+
+g <- ggplot(top_bottom_pathways, aes(reorder(ID, NES), NES)) +
+            geom_col(aes(fill=NES < 0)) +
+            coord_flip() +
+            labs(x="Pathway",
+                 y="Normalized Enrichment Score",
+                 title=paste0("Top ",TOP_PATHWAYS, " Pathways")) +
+                theme_minimal()
+show(g)
+
+# Henry comment: IF GSEA gave you a duplicate warning. GSEA was reacting to the large number of genes with identical rank values, not the underlying count data itself.
+```
+
+### Top 5 GSEA Plots
+
+The peak enrichment scores for the top 5 plots were very similar, although most of the pathways did not directly relate to the hypothesis being explored.
+
+``` {r gseaPlot, fig.height=10, fig.width=12, fig.align='center'}
+library(ggpubr)
+library(clusterProfiler)
+library(enrichplot)
+source("gseaplot_local.R") # local wrapper to GSEA plot functions, with configurable fonts
+
+top_5_pathways <- res_gsea_df %>%
+  slice_max(n = TOP_PATHWAYS, order_by=NES, with_ties=F) %>%
+  arrange(desc(NES)) %>%
+  dplyr::select(ID)
+
+plot_list <- lapply(top_5_pathways$ID, function(p) return(gseaplot_local(res_gsea, geneSetID = p, title = p, title.font.size=12)))
+ggarrange(plotlist=plot_list, ncol=2, nrow=3)
+```
+
+### Significant Pathways
+The significant pathways are shown in the table below. All have very close enrichment scores - from 2.4 to 2.06 for the first 100 pathways. So the the most significant pathways are too similarly expressed to make meaningful distinctions between them.
+
+``` {r gseaTable, fig.height=4, fig.width=7}
+
+# Significant Pathways in Table
+res_gsea_df %>%
+  dplyr::filter(p.adjust < P_THRESHOLD) %>%
+  dplyr::select(ID, p.adjust, NES)  %>%
+  arrange(desc(NES)) %>%
+  DT::datatable()
+
+```
+
+# DISCUSSION
+
+The GSEA analysis showed several pathway expression relating to inflammation, immune and bacterial infection response, along with many other pathways with similar enrichment scores. Overall, there was limited support for the hypothesis.
+
+There was expression of some pathways potentially related to oncogenesis, which could possibly be related to the cell line. There is previous evidence to suggest highly aberrant expression of some pathways in this cell line [^1]. Also, the cell line contains Human Papilloma Virus 18 DNA, known to cause the majority of cervical neoplasms and also implicated in the cell line's characteristic immortality. There is evidence of HPV-18 mRNA expression in HeLa cell lines[^2]. These are all confounding factors which warrant further investigation.
+
+The value of investigating individual gene expression with heatmaps or volcano plots for evaluating complex pathways appears limited, as gene expression and functional roles are heavily context dependent. The [GSEA analysis](#gsea) was found to be slightly more effective in discovering the cellular responses to intracellular bacterial infection.
+
+## Future Lines of Enquiry
+Given the nature of the cell-line used in this experiment, future experiments could be made with other, non-neoplastic epithelial cell lines, to try and eliminate the confounding problems of aberrant tumor cell expression and viral infection. Another dimension would be to use other intracellular bacteria to see how pathway expression differs across bacterial species. It is also unclear, at what stage of the infection the samples were taken, as this may affect gene expression, as well as the natural variation in infection life-cycles between individual cells.
+
+From a methodological perspective, it is recommended to perform RNA-seq analyses with at least two methods, from toolsets such as DESeq2, EdgeR and Limma-Voom.
+
+# APPENDIX
+
+## Duplicate Reads in Data {#Initial}
+A review of the DEseq data found a large number of read count duplicates (87.6% of counts has at least 1 duplicate), which gave warnings in the GSEA analysis. Duplicate reads are common in RNA-seq data sets, though the high degree of duplicate may be a cause for concern and may be caused by technical sequencing issues or a high abundance of a small number of genes. 
+
+After consideration, no action was taken to remove the duplicate values.
+
+The table below shows duplicates of two or more counts in the raw assay data.
+
+``` {r dups, echo=TRUE}
+
+# assay count duplicates
+assay_df <- data.frame(assay(rse_gene))
+assay_df<- assay_df %>% arrange(desc(SRR1049363))
+dupsCounts <- assay_df %>% group_by(SRR1049363) %>% filter(n() > 1)
+head(dupsCounts, n = 12)
+
+duplicated_n <- nrow(dupsCounts)
+duplicated_percentage <- round(duplicated_n/nrow(assay_df) * 100, 1)
+print(duplicated_percentage)
+```
+
+## Management of Outliers
+The initial DESeq2 analysis discovered a high proportion of outliers (13%). The data contains 2 groups of 3 replicates, and the DESeq
+analysis contains a parameter 'minReplicatesForReplace' with a default value of 7, which is 'the minimum number of replicates required in order to use replaceOutliers on a sample', so for this data set, no outlier replacement was performed.
+
+```{}
+ out of 30230 with nonzero total read count
+   adjusted p-value < 0.1
+   LFC > 0 (up)       : 5555, 18%
+   LFC < 0 (down)     : 5050, 17%
+   outliers [1]       : 3820, 13%
+   low counts [2]     : 2187, 7.2%
+   (mean count < 9)
+```
+
+A Box plot of the Cooks distances shows similar distributions of outliers for all replicates, so no single replicate stands out as a source of technical error. One replicate, SRR1049367 (Salmonella 2), did contain a lot of small distances, but this is not of significance.
+
+```{r boxplot_cooks, fig.height=5, fig.width=5}
+
+boxplot(log10(assays(dds)[["cooks"]]), range=0, las=2)
+```
+
+### Replacing Outliers
+The DESeq2 analysis was repeated with 'minReplicatesForReplace' set to the minimum value of 3, which allows outliers in a single control group to be replaced. 
+
+This configuration eliminated the outliers by replacement.
+```{r summary_outliers, echo=T}
+summary(dds_res)
+```
+
+A review of the most extreme raw counts shows that the very high log2 fold changes are non-zero values in a single replicate group, with zero values in the other group. These values appear valid as the non-zero counts are relatively consistent between replicates, and the zero values merely represent a lower than ideal sequencing depth.
+
+\tiny
+``` {r outliers,  echo=TRUE}
+library(tibble)
+
+raw_counts <- counts(dds)
+raw_counts <- data.frame(raw_counts) %>% 
+              rownames_to_column("GENEID") %>%
+              mutate(GENEID=sub('\\..+', "", GENEID))
+
+# possible outliers in this data set
+dds_res_max_values <- dds_res_df %>%
+  dplyr::filter(abs(log2FoldChange) > 10) %>%
+  arrange(desc(log2FoldChange))
+
+# this is raw counts
+inner_join(x=raw_counts,
+           y=dds_res_max_values,
+           by="GENEID") %>%
+           dplyr::select(GENEID, symbol, log2FoldChange, c(2:7)) %>%
+           arrange(desc(log2FoldChange)) %>%
+           dplyr::filter(row_number() <= TOP_PATHWAYS | row_number()> n()- TOP_PATHWAYS) %>%
+           dplyr::rename("Ctl1" = "SRR1049363", "Ctl2" = "SRR1049364", "Ctl3" = "SRR1049365", 
+                         "Salm1" = "SRR1049366", "Salm2" = "SRR1049367", "Salm3" = "SRR1049368")
+
+```
+\normalsize
+
+## Removal of Technical Errors
+Some counts appeared in only a single replicate and were highly significant - these were considered technical artefacts that were removed. Many of these counts had duplicated normalized counts, and a sample of these is shown below.
+
+All of these were removed from the data set.
+
+```
+head(sig_norm_counts)
+                   SRR1049363 SRR1049364 SRR1049365 SRR1049366  SRR1049367 SRR1049368
+ENSG00000145864.12          0          0          0          0 99913.64158    58646.4
+ENSG00000177770.11          0          0          0          0    92.92563        0.0
+ENSG00000200502.1           0          0          0          0    92.92563        0.0
+ENSG00000206881.1           0          0          0          0    92.92563        0.0
+ENSG00000228550.1           0          0          0          0    92.92563        0.0
+ENSG00000253302.1           0          0          0          0    92.92563        0.0
+```
+
+## Analysis of Distribution {#InitialDistribution}
+DESeq2 assumes a negative normal distribution, so the data was checked to assess where this was a valid assumption. The dispersion plot shows that variances exceed the means, satisfying the requirement for accepting the negative binomial distribution assumption.
+
+```{r assessDist, fig.height=4, fig.width=6, fig.align='center'}
+mean_counts <- apply(assay_df[,1:ncol(assay_df)], 1, mean)
+variance_counts <- apply(assay_df[,1:ncol(assay_df)], 1, var)
+
+ggplot(data.frame(mean_counts, variance_counts)) +
+        geom_point((aes(x=mean_counts, y=variance_counts))) +
+        scale_y_log10(labels = scales::scientific) +
+        scale_x_log10(labels = scales::scientific) +
+        xlab("Mean Counts per Gene") +
+        ylab("Variance per Gene") +
+        annotation_logticks()
+
+```
+
+
+## GSEA Plots in clusterProfiler R Package
+The `gseaplot` function in clusterProfile has font settings which are too big for R markdown files. A defect ticket was raised in the `enrichplot` repository in GitHub(https://github.com/YuLab-SMU/enrichplot/issues/129) and a local
+wrapper function `gseaplot_local` which replicated the `gseaplot` function but added configurable font settings to enable printing multiple GSEA plots side-by-side.
+
+The code for this is in <repo>/gseaplot_local.R.
+
+Once this defect is addressed, the local wrapper function can be replaced by the original `gseaplot` function call.
+
+## Software Version Details
+The details below detail the relevant system version details used to produce this analysis.
+</br>
+```{r versionInfo}
+sessionInfo()
+```
+
+[^1]: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3737162
+[^2]: https://royalsocietypublishing.org/doi/10.1098/rsob.130119
+[^3]: https://www.uniprot.org/uniprot
+[^4]: http://www.gsea-msigdb.org/gsea/msigdb/genesets.jsp
+[^5]: https://maayanlab.cloud/Enrichr/
+
+
+## References
+
