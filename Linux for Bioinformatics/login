@@ -1,0 +1,2 @@
+#!/bin/zsh
+ssh -i serveruser-keypair.pem serveruser@ec2-3-25-135-187.ap-southeast-2.compute.amazonaws.com
